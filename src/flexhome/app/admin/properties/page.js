@@ -1,6 +1,7 @@
 "use client";
 
 import AdminGate from "@/components/admin/AdminGate";
+import Pagination from "@/components/admin/Pagination";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -34,9 +35,11 @@ function PropertiesList() {
   const [f, setF] = useState(INIT);
   const [showMore, setShowMore] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
-  function upd(key, val) { setF((p) => ({ ...p, [key]: val })); }
-  function clear() { setF(INIT); }
+  function upd(key, val) { setF((p) => ({ ...p, [key]: val })); setPage(1); }
+  function clear() { setF(INIT); setPage(1); }
 
   async function load() {
     setLoading(true); setError("");
@@ -110,6 +113,10 @@ function PropertiesList() {
 
   const anyFilter = Object.values(f).some((v) => v !== "");
   const activeCount = Object.values(f).filter((v) => v !== "").length;
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const paged = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   const inputCls = "h-9 rounded-xl border border-navy-900/10 bg-white px-3 text-sm text-navy-800 placeholder:text-navy-800/35 focus:outline-none focus:ring-2 focus:ring-teal-500/30";
   const selectCls = "h-9 rounded-xl border border-navy-900/10 bg-white px-3 text-sm text-navy-800 capitalize focus:outline-none focus:ring-2 focus:ring-teal-500/30";
@@ -225,7 +232,7 @@ function PropertiesList() {
             ) : filtered.length === 0 ? (
               <tr><td className="px-4 py-10 text-center text-navy-800/40" colSpan={8}>No properties match your filters.</td></tr>
             ) : (
-              filtered.map((row) => (
+              paged.map((row) => (
                 <tr key={row.id} className="border-b border-navy-900/5 last:border-0 hover:bg-sand-50">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
@@ -301,6 +308,15 @@ function PropertiesList() {
           </tbody>
         </table>
       </div>
+
+      <Pagination
+        page={safePage}
+        pageCount={pageCount}
+        pageSize={pageSize}
+        total={filtered.length}
+        onPageChange={setPage}
+        onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
+      />
 
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/50 p-4 backdrop-blur-[2px]">

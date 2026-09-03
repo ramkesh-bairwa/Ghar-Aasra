@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, X, AlertCircle, Inbox, Eye, Search } from "lucide-react";
+import Pagination from "./Pagination";
 
 function singularize(label) {
   if (/ies$/.test(label)) return label.replace(/ies$/, "y");
@@ -17,6 +18,8 @@ export default function ResourceManager({ resource, config }) {
   const [viewing, setViewing] = useState(null);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   async function load() {
     setLoading(true);
@@ -30,11 +33,13 @@ export default function ResourceManager({ resource, config }) {
 
   useEffect(() => {
     load();
+    setPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resource]);
 
   function setFilter(key, value) {
     setFilters((f) => ({ ...f, [key]: value }));
+    setPage(1);
   }
 
   const filtered = rows.filter((row) => {
@@ -56,7 +61,11 @@ export default function ResourceManager({ resource, config }) {
   const hasFilters = config.filters?.length > 0;
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
 
-  function clearFilters() { setFilters({}); }
+  function clearFilters() { setFilters({}); setPage(1); }
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const paged = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   async function handleSave(formValues) {
     setSaving(true);
@@ -173,7 +182,7 @@ export default function ResourceManager({ resource, config }) {
                 </td>
               </tr>
             ) : (
-              filtered.map((row) => (
+              paged.map((row) => (
                 <tr key={row.id} className="border-b border-navy-900/5 last:border-0 hover:bg-sand-50">
                   {config.listFields.map((f) => (
                     <td key={f} className="max-w-[220px] truncate px-4 py-3 text-navy-800/80">
@@ -199,6 +208,15 @@ export default function ResourceManager({ resource, config }) {
           </tbody>
         </table>
       </div>
+
+      <Pagination
+        page={safePage}
+        pageCount={pageCount}
+        pageSize={pageSize}
+        total={filtered.length}
+        onPageChange={setPage}
+        onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
+      />
 
       {viewing && (
         <ViewModal
