@@ -1,0 +1,32 @@
+{
+  "name": "flexhome-real-estate",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:init": "node database/init.js",
+    "db:seed": "node database/seed.mjs"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.424.0",
+    "mysql2": "^3.11.0",
+    "next": "14.2.35",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-leaflet": "^4.2.1",
+    "recharts": "^3.10.1"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.19",
+    "dotenv": "^16.4.5",
+    "eslint": "^10.9.1",
+    "postcss": "^8.4.40",
+    "tailwindcss": "^3.4.7"
+  }
+}
