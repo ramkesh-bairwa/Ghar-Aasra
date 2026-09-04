@@ -2,13 +2,13 @@ services:
 
   flexhome:
     build:
-      context: ./src/flexhome
-      dockerfile: ../../docker/flexhome/Dockerfile
+      context: .
+      dockerfile: Dockerfile
     container_name: gharaasra_flexhome
     restart: unless-stopped
     working_dir: /app
     volumes:
-      - ./src/flexhome:/app
+      - .:/app
       - flexhome_node_modules:/app/node_modules
       - flexhome_next_cache:/app/.next
     environment:
@@ -35,9 +35,9 @@ services:
       - MYSQL_DATABASE=flexhome
     volumes:
       - dbdata:/var/lib/mysql
-      - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf
-      - ./docker/mysql/conf.d/custom.cnf:/etc/mysql/conf.d/custom.cnf
-      - ./docker/mysql/init:/docker-entrypoint-initdb.d
+      - ./mysql/my.cnf:/etc/mysql/conf.d/my.cnf
+      - ./mysql/conf.d/custom.cnf:/etc/mysql/conf.d/custom.cnf
+      - ./mysql/init:/docker-entrypoint-initdb.d
     ports:
       - "3307:3306"
     networks:
