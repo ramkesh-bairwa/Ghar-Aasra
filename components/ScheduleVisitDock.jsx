@@ -10,7 +10,7 @@ import { CalendarPlus } from "lucide-react";
 // the 4-item right dock uses.
 export default function ScheduleVisitDock() {
   const pathname = usePathname();
-  if (pathname?.startsWith("/admin")) return null;
+  if (/^\/(admin|vendor)(\/|$)/.test(pathname || "")) return null;
 
   const active = pathname === "/schedule-visit";
 

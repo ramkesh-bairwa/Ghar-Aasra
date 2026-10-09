@@ -3,7 +3,7 @@ import Footer from "@/components/Footer";
 import PageHeader from "@/components/PageHeader";
 import ScheduleVisitForm from "@/components/ScheduleVisitForm";
 
-export const metadata = { title: "Schedule a Visit — Flex Home" };
+export const metadata = { title: "Schedule a Visit" };
 
 export default function ScheduleVisitPage({ searchParams }) {
   return (

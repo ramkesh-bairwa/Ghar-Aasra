@@ -4,7 +4,7 @@ import PageHeader from "@/components/PageHeader";
 import CompareTable from "@/components/CompareTable";
 import RequireAuth from "@/components/RequireAuth";
 
-export const metadata = { title: "My Compares — Flex Home" };
+export const metadata = { title: "My Compares" };
 
 export default function ComparePage() {
   return (

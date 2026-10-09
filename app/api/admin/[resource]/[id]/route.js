@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { resources } from "@/lib/adminResources";
 import { requireAdmin } from "@/lib/adminGuard";
+import { canAccessResource } from "@/lib/adminPermissions";
 
 function getConfig(resource) {
   return resources[resource] || null;
@@ -16,6 +17,9 @@ function normalize(config, colName, value) {
 export async function GET(request, { params }) {
   const admin = requireAdmin();
   if (!admin) return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+  if (!canAccessResource(admin.admin_role, params.resource)) {
+    return NextResponse.json({ error: "Not permitted." }, { status: 403 });
+  }
 
   const config = getConfig(params.resource);
   if (!config) return NextResponse.json({ error: "Unknown resource." }, { status: 404 });
@@ -32,6 +36,9 @@ export async function GET(request, { params }) {
 export async function PUT(request, { params }) {
   const admin = requireAdmin();
   if (!admin) return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+  if (!canAccessResource(admin.admin_role, params.resource)) {
+    return NextResponse.json({ error: "Not permitted." }, { status: 403 });
+  }
 
   const config = getConfig(params.resource);
   if (!config) return NextResponse.json({ error: "Unknown resource." }, { status: 404 });
@@ -41,8 +48,14 @@ export async function PUT(request, { params }) {
   const cols = allowed.filter((c) => c in body);
   if (!cols.length) return NextResponse.json({ error: "No valid fields submitted." }, { status: 400 });
 
-  const setClause = cols.map((c) => `${c} = ?`).join(", ");
+  let setClause = cols.map((c) => `${c} = ?`).join(", ");
   const values = [...cols.map((c) => normalize(config, c, body[c])), params.id];
+  // A schedule request reaches the listing's seller once staff mark it
+  // "scheduled" (their approval); setting it back to "new" withdraws it.
+  if (params.resource === "visit_requests" && "status" in body) {
+    if (body.status === "scheduled") setClause += ", approved_at = COALESCE(approved_at, NOW())";
+    if (body.status === "new") setClause += ", approved_at = NULL";
+  }
 
   try {
     await query(`UPDATE ${config.table} SET ${setClause} WHERE id = ?`, values);
@@ -55,6 +68,9 @@ export async function PUT(request, { params }) {
 export async function DELETE(request, { params }) {
   const admin = requireAdmin();
   if (!admin) return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+  if (!canAccessResource(admin.admin_role, params.resource)) {
+    return NextResponse.json({ error: "Not permitted." }, { status: 403 });
+  }
 
   const config = getConfig(params.resource);
   if (!config) return NextResponse.json({ error: "Unknown resource." }, { status: 404 });

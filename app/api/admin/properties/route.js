@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { requireAdmin } from "@/lib/adminGuard";
+import { requireAdminForResource } from "@/lib/adminGuard";
 
 const ALLOWED = [
   "title","slug","description","listing_type","property_type","category_id","subcategory_id",
@@ -28,7 +28,7 @@ function normalize(col, val) {
 }
 
 export async function GET() {
-  if (!requireAdmin()) return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+  if (!requireAdminForResource("properties")) return NextResponse.json({ error: "Not authenticated or not permitted." }, { status: 403 });
   try {
     const rows = await query("SELECT * FROM properties ORDER BY created_at DESC");
     return NextResponse.json({ rows });
@@ -38,7 +38,7 @@ export async function GET() {
 }
 
 export async function POST(request) {
-  if (!requireAdmin()) return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+  if (!requireAdminForResource("properties")) return NextResponse.json({ error: "Not authenticated or not permitted." }, { status: 403 });
   const body = await request.json();
   const cols = ALLOWED.filter((c) => c in body && body[c] !== "" && body[c] !== null && body[c] !== undefined);
   if (!cols.length) return NextResponse.json({ error: "No valid fields." }, { status: 400 });

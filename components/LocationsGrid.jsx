@@ -1,11 +1,9 @@
-export default function LocationsGrid({ locations = [] }) {
+export default function LocationsGrid({ locations = [], title, subtitle }) {
   return (
     <section className="bg-white py-16">
       <div className="container-page">
-        <h2 className="font-display text-2xl text-navy-900 md:text-3xl">Properties by location</h2>
-        <p className="mt-1 text-[15px] text-navy-800/60">
-          Each city page comes with its own price trends and neighborhood notes.
-        </p>
+        <h2 className="font-display text-2xl text-navy-900 md:text-3xl">{title}</h2>
+        {subtitle && <p className="mt-1 text-[15px] text-navy-800/60">{subtitle}</p>}
 
         <div className="mt-7 grid grid-cols-2 gap-4 md:grid-cols-5">
           {locations.map((l) => (

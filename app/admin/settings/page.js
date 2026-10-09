@@ -4,6 +4,8 @@ import AdminGate from "@/components/admin/AdminGate";
 import { useEffect, useRef, useState } from "react";
 import { UploadCloud, Trash2, Save, Check } from "lucide-react";
 import { SETTINGS_GROUPS, ALL_SETTINGS_FIELDS } from "@/lib/siteSettingsSchema";
+import { getBackgroundEmbed } from "@/lib/videoEmbed";
+import { CardSkeletonList } from "@/components/admin/AdminSkeleton";
 
 export default function AdminSettingsPage() {
   return (
@@ -19,6 +21,8 @@ function SiteSettingsEditor() {
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState("");
+  // Bumped on save so image previews built from settings (the favicon) refresh.
+  const [savedAt, setSavedAt] = useState(0);
 
   useEffect(() => {
     fetch("/api/admin/site-settings")
@@ -48,6 +52,7 @@ function SiteSettingsEditor() {
       });
       if (res.ok) {
         setDirty(false);
+        setSavedAt(Date.now());
         setMessage("Saved. Changes are live on the site.");
       } else {
         setMessage("Could not save — check your MySQL connection.");
@@ -71,7 +76,7 @@ function SiteSettingsEditor() {
       </div>
 
       {loading ? (
-        <p className="mt-8 text-sm text-navy-800/50">Loading settings…</p>
+        <div className="mt-8"><CardSkeletonList count={3} height="h-48" /></div>
       ) : (
         <div className="mt-6 space-y-6">
           {SETTINGS_GROUPS.map((group) => (
@@ -79,8 +84,8 @@ function SiteSettingsEditor() {
               <h2 className="font-display text-lg text-navy-900">{group.label}</h2>
               {group.description && <p className="mt-1 text-xs text-navy-800/50">{group.description}</p>}
               <div className="mt-5 grid gap-5 sm:grid-cols-2">
-                {group.fields.map((field) => (
-                  <Field key={field.key} field={field} value={values[field.key]} onChange={(v) => setValue(field.key, v)} />
+                {group.fields.filter((field) => isShown(field, values)).map((field) => (
+                  <Field key={field.key} field={field} value={values[field.key]} onChange={(v) => setValue(field.key, v)} savedAt={savedAt} />
                 ))}
               </div>
             </section>
@@ -106,19 +111,52 @@ function SiteSettingsEditor() {
   );
 }
 
-function Field({ field, value, onChange }) {
+function Field({ field, value, onChange, savedAt }) {
   const wide = field.type === "textarea";
   return (
     <div className={wide ? "sm:col-span-2" : ""}>
       <label className="mb-1.5 block text-xs font-medium text-navy-800/60">{field.label}</label>
       {field.help && <p className="mb-1.5 text-xs text-navy-800/40">{field.help}</p>}
-      <FieldInput field={field} value={value} onChange={onChange} />
+      <FieldInput field={field} value={value} onChange={onChange} savedAt={savedAt} />
     </div>
   );
 }
 
-function FieldInput({ field, value, onChange }) {
+// Fields with `showIf: { otherKey: [values] }` only appear when that other
+// setting has one of those values (e.g. the YouTube link only for a YouTube hero).
+function isShown(field, values) {
+  if (!field.showIf) return true;
+  return Object.entries(field.showIf).every(([key, allowed]) => {
+    const def = ALL_SETTINGS_FIELDS.find((f) => f.key === key)?.default;
+    return allowed.includes(values[key] ?? def);
+  });
+}
+
+function FieldInput({ field, value, onChange, savedAt = 0 }) {
   switch (field.type) {
+    case "youtube": {
+      const embed = getBackgroundEmbed(value);
+      return (
+        <div>
+          <input
+            type="url"
+            value={value ?? ""}
+            placeholder={field.placeholder}
+            onChange={(e) => onChange(e.target.value.trim())}
+            className={`w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/30 ${value && !embed ? "border-coral-500" : "border-navy-900/10"}`}
+          />
+          {value && !embed && <p className="mt-1.5 text-xs font-medium text-coral-600">That doesn&apos;t look like a YouTube or Vimeo video link. Copy the link from the video page or its Share button.</p>}
+          {embed && (
+            <div className="mt-2 flex items-center gap-3 rounded-xl bg-sand-50 p-2 ring-1 ring-navy-900/8">
+              {embed.thumb ? <img src={embed.thumb} alt="" className="h-14 w-24 rounded-lg object-cover" /> : <span className="flex h-14 w-24 items-center justify-center rounded-lg bg-navy-900 text-[11px] font-semibold text-white">Vimeo</span>}
+              <span className="text-xs text-navy-800/60">
+                <b className="text-teal-600">✓ {embed.kind === "youtube" ? "YouTube" : "Vimeo"} video found.</b> It will play muted on loop behind the homepage search.
+              </span>
+            </div>
+          )}
+        </div>
+      );
+    }
     case "text":
       return (
         <input
@@ -172,7 +210,16 @@ function FieldInput({ field, value, onChange }) {
         </div>
       );
     case "image":
-      return <MediaField kind="image" value={value} onChange={onChange} />;
+      return (
+        <MediaField
+          kind="image"
+          value={value}
+          onChange={onChange}
+          // The favicon's "default" is the built-in icon drawn in the saved colours.
+          fallback={field.key === "favicon_url" ? `/theme-icon?size=48&t=${savedAt}` : field.default}
+          dark={field.key === "logo_dark_url"}
+        />
+      );
     case "video":
       return <MediaField kind="video" value={value} onChange={onChange} />;
     case "toggle": {
@@ -194,7 +241,7 @@ function FieldInput({ field, value, onChange }) {
   }
 }
 
-function MediaField({ kind, value, onChange }) {
+function MediaField({ kind, value, onChange, fallback = "", dark = false }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const fileInputRef = useRef(null);
@@ -226,8 +273,17 @@ function MediaField({ kind, value, onChange }) {
 
   return (
     <div>
-      {value && kind === "image" && (
-        <img src={value} alt="" className="mb-2 h-24 w-auto rounded-lg border border-navy-900/10 object-contain" />
+      {kind === "image" && (value || fallback) && (
+        <div className="mb-2 flex items-center gap-3">
+          <img
+            src={value || fallback}
+            alt=""
+            className={`h-24 w-auto max-w-xs rounded-lg border border-navy-900/10 object-contain p-2 ${dark ? "bg-navy-900" : "bg-white"}`}
+          />
+          {(!value || value === fallback) && fallback && (
+            <span className="rounded-full bg-navy-900/5 px-2.5 py-1 text-[11px] font-medium text-navy-800/55">Default</span>
+          )}
+        </div>
       )}
       {value && kind === "video" && (
         <video src={value} controls className="mb-2 w-full max-w-xs rounded-lg border border-navy-900/10" />
@@ -239,20 +295,20 @@ function MediaField({ kind, value, onChange }) {
           <input
             ref={fileInputRef}
             type="file"
-            accept={kind === "video" ? "video/mp4,video/webm,video/ogg,video/quicktime" : "image/jpeg,image/png,image/webp,image/gif"}
+            accept={kind === "video" ? "video/mp4,video/webm,video/ogg,video/quicktime" : "image/jpeg,image/png,image/webp,image/gif,image/x-icon,.ico"}
             onChange={handleFileChange}
             disabled={uploading}
             className="hidden"
           />
         </label>
-        {value && (
+        {value && value !== fallback && (
           <button
             type="button"
             onClick={() => onChange("")}
             disabled={uploading}
             className="flex items-center gap-1 rounded-full border border-navy-900/10 px-3 py-2 text-xs font-medium text-navy-800/50 hover:text-red-600"
           >
-            <Trash2 size={13} /> Remove
+            <Trash2 size={13} /> {fallback ? "Reset to default" : "Remove"}
           </button>
         )}
       </div>

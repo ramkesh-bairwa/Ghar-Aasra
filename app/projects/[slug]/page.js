@@ -8,7 +8,7 @@ import PropertyCard from "@/components/PropertyCard";
 
 export async function generateMetadata({ params }) {
   const project = await getProjectBySlug(params.slug);
-  return { title: project ? `${project.name} — Flex Home` : "Project — Flex Home" };
+  return { title: project ? `${project.name}` : "Project" };
 }
 
 const statusLabel = { presale: "Presale", under_construction: "Under construction", selling: "Selling now", completed: "Completed" };

@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { requireAdmin } from "@/lib/adminGuard";
+import { requireAdminForResource } from "@/lib/adminGuard";
 import { invalidateSiteSettingsCache } from "@/lib/queries";
 import { ALL_SETTINGS_FIELDS } from "@/lib/siteSettingsSchema";
 
 const VALID_KEYS = new Set(ALL_SETTINGS_FIELDS.map((f) => f.key));
 
 export async function GET() {
-  const admin = requireAdmin();
-  if (!admin) return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+  const admin = requireAdminForResource("settings");
+  if (!admin) return NextResponse.json({ error: "Not authenticated or not permitted." }, { status: 403 });
   try {
     const rows = await query("SELECT setting_key, setting_value FROM site_settings");
     return NextResponse.json({ rows });
@@ -29,8 +29,8 @@ async function upsertSetting(key, value) {
 // hero video) or a bulk { settings: { key: value, ... } } save from the
 // admin Site Settings form.
 export async function PUT(request) {
-  const admin = requireAdmin();
-  if (!admin) return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+  const admin = requireAdminForResource("settings");
+  if (!admin) return NextResponse.json({ error: "Not authenticated or not permitted." }, { status: 403 });
 
   const body = await request.json();
 

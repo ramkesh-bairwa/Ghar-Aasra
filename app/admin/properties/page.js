@@ -8,6 +8,8 @@ import {
   Plus, Pencil, AlertCircle, Star, Home, Eye, Search, X,
   ChevronDown, ChevronUp, Copy, Globe, EyeOff, ShieldCheck,
 } from "lucide-react";
+import { TableSkeletonRows } from "@/components/admin/AdminSkeleton";
+import { useDialog } from "@/components/ConfirmDialog";
 
 const STATUS_STYLES = {
   draft:       "bg-navy-900/8 text-navy-800/60",
@@ -28,6 +30,7 @@ export default function AdminPropertiesPage() {
 }
 
 function PropertiesList() {
+  const { alert: notify, dialog } = useDialog();
   const router = useRouter();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -56,7 +59,7 @@ function PropertiesList() {
     const res = await fetch(`/api/admin/properties/${id}`, { method: "DELETE" });
     setDeleteTarget(null);
     if (res.ok) load();
-    else alert("Delete failed.");
+    else notify({ title: "Delete failed", message: "Delete failed.", tone: "danger" });
   }
 
   async function handleDuplicate(e, id) {
@@ -68,7 +71,7 @@ function PropertiesList() {
     });
     const data = await res.json();
     if (res.ok) { load(); router.push(`/admin/properties/${data.id}`); }
-    else alert("Duplicate failed.");
+    else notify({ title: "Duplicate failed", message: "Duplicate failed.", tone: "danger" });
   }
 
   async function handleTogglePublish(e, row) {
@@ -80,7 +83,7 @@ function PropertiesList() {
       body: JSON.stringify({ _action: "publish", status: newStatus }),
     });
     if (res.ok) load();
-    else alert("Status update failed.");
+    else notify({ title: "Status update failed", message: "Status update failed.", tone: "danger" });
   }
 
   async function handleToggleApprove(e, row) {
@@ -91,7 +94,7 @@ function PropertiesList() {
       body: JSON.stringify({ _action: "approve", approved: !row.approved }),
     });
     if (res.ok) load();
-    else alert("Approval update failed.");
+    else notify({ title: "Approval update failed", message: "Approval update failed.", tone: "danger" });
   }
 
   const filtered = rows.filter((r) => {
@@ -226,7 +229,7 @@ function PropertiesList() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td className="px-4 py-6 text-navy-800/40" colSpan={8}>Loading...</td></tr>
+              <TableSkeletonRows cols={8} />
             ) : rows.length === 0 ? (
               <tr><td className="px-4 py-10 text-center text-navy-800/40" colSpan={8}>No properties yet — add your first one.</td></tr>
             ) : filtered.length === 0 ? (
@@ -340,6 +343,7 @@ function PropertiesList() {
           </div>
         </div>
       )}
+      {dialog}
     </div>
   );
 }

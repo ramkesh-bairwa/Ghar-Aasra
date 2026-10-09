@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { query } from "@/lib/db";
 import { requireUser } from "@/lib/userGuard";
+import { insertWithBookingCode } from "@/lib/bookingCode";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -24,12 +24,13 @@ export async function POST(request) {
   const session = requireUser();
 
   try {
-    const result = await query(
-      `INSERT INTO visit_requests (user_id, name, email, phone, property_id, preferred_date, preferred_time, message, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new')`,
+    const { result, code } = await insertWithBookingCode(
+      "VR",
+      `INSERT INTO visit_requests (booking_code, user_id, name, email, phone, property_id, preferred_date, preferred_time, message, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')`,
       [session?.id || null, name.trim(), email.trim(), phone || null, propertyId ? Number(propertyId) : null, preferredDate, preferredTime, message || null]
     );
-    return NextResponse.json({ ok: true, id: result.insertId });
+    return NextResponse.json({ ok: true, id: result.insertId, bookingCode: code });
   } catch (err) {
     return NextResponse.json({ error: "Could not submit your request.", detail: err.message }, { status: 503 });
   }

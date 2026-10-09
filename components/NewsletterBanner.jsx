@@ -1,15 +1,13 @@
 import { Send } from "lucide-react";
 
-export default function NewsletterBanner() {
+export default function NewsletterBanner({ title, subtitle }) {
   return (
     <section className="bg-white pb-16">
       <div className="container-page">
         <div className="flex flex-col items-start gap-6 rounded-xl2 bg-navy-900 p-8 md:flex-row md:items-center md:justify-between md:p-10">
           <div>
-            <h2 className="font-display text-2xl text-white">New listings, straight to your inbox.</h2>
-            <p className="mt-1 max-w-md text-[15px] text-white/60">
-              One email a week. No spam, unsubscribe any time.
-            </p>
+            <h2 className="font-display text-2xl text-white">{title}</h2>
+            {subtitle && <p className="mt-1 max-w-md text-[15px] text-white/60">{subtitle}</p>}
           </div>
           <form className="flex w-full max-w-sm gap-2 md:w-auto">
             <input

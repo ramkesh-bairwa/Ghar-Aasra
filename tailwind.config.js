@@ -53,6 +53,13 @@ module.exports = {
       borderRadius: {
         xl2: "1.1rem",
       },
+      // `/8` is used for hairline rings/dividers across the site (e.g.
+      // `ring-navy-900/8`) but isn't in Tailwind's default opacity scale —
+      // without this those classes silently don't generate and the ring falls
+      // back to Tailwind's default blue.
+      opacity: {
+        8: "0.08",
+      },
     },
   },
   plugins: [],

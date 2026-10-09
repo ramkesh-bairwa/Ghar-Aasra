@@ -3,7 +3,7 @@ import Footer from "@/components/Footer";
 import PageHeader from "@/components/PageHeader";
 import { getStaticPage } from "@/lib/queries";
 
-export const metadata = { title: "Privacy Policy — Flex Home" };
+export const metadata = { title: "Privacy Policy" };
 
 export default async function PrivacyPolicyPage() {
   const page = await getStaticPage("privacy-policy");

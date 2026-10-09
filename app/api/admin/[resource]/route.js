@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { resources } from "@/lib/adminResources";
 import { requireAdmin } from "@/lib/adminGuard";
+import { canAccessResource } from "@/lib/adminPermissions";
 
 function getConfig(resource) {
   return resources[resource] || null;
@@ -10,6 +11,9 @@ function getConfig(resource) {
 export async function GET(request, { params }) {
   const admin = requireAdmin();
   if (!admin) return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+  if (!canAccessResource(admin.admin_role, params.resource)) {
+    return NextResponse.json({ error: "Not permitted." }, { status: 403 });
+  }
 
   const config = getConfig(params.resource);
   if (!config) return NextResponse.json({ error: "Unknown resource." }, { status: 404 });
@@ -28,6 +32,9 @@ export async function GET(request, { params }) {
 export async function POST(request, { params }) {
   const admin = requireAdmin();
   if (!admin) return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+  if (!canAccessResource(admin.admin_role, params.resource)) {
+    return NextResponse.json({ error: "Not permitted." }, { status: 403 });
+  }
 
   const config = getConfig(params.resource);
   if (!config) return NextResponse.json({ error: "Unknown resource." }, { status: 404 });

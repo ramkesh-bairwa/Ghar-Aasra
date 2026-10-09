@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { requireAdmin } from "@/lib/adminGuard";
+import { requireAdminForResource } from "@/lib/adminGuard";
 
 export async function GET() {
-  const admin = requireAdmin();
-  if (!admin) return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+  const admin = requireAdminForResource("pages");
+  if (!admin) return NextResponse.json({ error: "Not authenticated or not permitted." }, { status: 403 });
   try {
     const rows = await query("SELECT * FROM pages");
     return NextResponse.json({ rows });
@@ -14,8 +14,8 @@ export async function GET() {
 }
 
 export async function PUT(request) {
-  const admin = requireAdmin();
-  if (!admin) return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+  const admin = requireAdminForResource("pages");
+  if (!admin) return NextResponse.json({ error: "Not authenticated or not permitted." }, { status: 403 });
 
   const { slug, title, content } = await request.json();
   if (!slug) return NextResponse.json({ error: "Missing slug." }, { status: 400 });

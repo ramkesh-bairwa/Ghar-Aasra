@@ -1,8 +1,6 @@
-// Seed data. This is what every page shows out of the box.
-// lib/queries.js tries MySQL first (the tables the admin panel writes to)
-// and falls back to this file whenever the DB is empty or not configured —
-// so the site works immediately, and starts reflecting the admin panel
-// the moment you run `npm run db:init` and add records there.
+// Demo content loaded into MySQL by database/seed.mjs (`npm run db:seed`).
+// The site never reads this file directly — every page reads from the
+// database through lib/queries.js, so edit content in /admin, not here.
 
 export const amenitiesList = ["Roof terrace", "Parking", "Swimming pool", "Pet friendly", "Home office", "Concierge", "Garden"];
 

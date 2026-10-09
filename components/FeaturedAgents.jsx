@@ -1,11 +1,11 @@
 import { Mail, Phone, Home as HomeIcon, Star } from "lucide-react";
 
-export default function FeaturedAgents({ agents = [] }) {
+export default function FeaturedAgents({ agents = [], title, subtitle }) {
   return (
     <section className="bg-white py-16">
       <div className="container-page">
-        <h2 className="font-display text-2xl text-navy-900 md:text-3xl">Featured agents</h2>
-        <p className="mt-1 text-[15px] text-navy-800/60">Licensed, reviewed, and quick to reply.</p>
+        <h2 className="font-display text-2xl text-navy-900 md:text-3xl">{title}</h2>
+        {subtitle && <p className="mt-1 text-[15px] text-navy-800/60">{subtitle}</p>}
 
         <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {agents.map((a) => (

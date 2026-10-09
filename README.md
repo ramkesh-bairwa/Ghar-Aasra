@@ -40,8 +40,9 @@ Demo login (used automatically until you seed/create your own admin user):
 - `lib/db.js` — `mysql2` connection pool + `query(sql, params)`.
 - `lib/queries.js` — every public page calls functions from here
   (`listProperties`, `getPropertyBySlug`, `listAgents`, `listProjects`,
-  etc). Each one tries MySQL first and falls back to the seed data in
-  `lib/data.js` only if the table is empty or unreachable.
+  etc). All content is read from MySQL — there is no static fallback.
+  Load the demo content with `npm run db:seed` (from
+  `database/seed-data.mjs`), then manage it in `/admin`.
 - `lib/adminResources.js` — one config entry per admin-manageable table
   (columns, field types, labels). This drives both the generic CRUD API
   (`app/api/admin/[resource]`) and the generic admin UI

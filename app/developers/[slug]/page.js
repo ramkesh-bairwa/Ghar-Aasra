@@ -6,7 +6,7 @@ import { Globe, Calendar, Layers } from "lucide-react";
 
 export async function generateMetadata({ params }) {
   const developer = await getDeveloperBySlug(params.slug);
-  return { title: developer ? `${developer.companyName} — Flex Home` : "Developer — Flex Home" };
+  return { title: developer ? `${developer.companyName}` : "Developer" };
 }
 
 const statusLabel = { presale: "Presale", under_construction: "Under construction", selling: "Selling now", completed: "Completed" };

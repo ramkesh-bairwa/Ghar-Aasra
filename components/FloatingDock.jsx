@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { GitCompare, Map, Heart, Calculator, Sparkles, X } from "lucide-react";
 import { useUserLists } from "@/lib/userLists";
+import { isPropertyDetailPath } from "@/components/WhatsAppFloat";
 
 const items = [
   { href: "/compare", label: "Compare", icon: GitCompare, countKey: "compare" },
@@ -24,10 +25,16 @@ export default function FloatingDock() {
   // over the next page's content.
   useEffect(() => setOpen(false), [pathname]);
 
-  if (pathname?.startsWith("/admin")) return null;
+  if (/^\/(admin|vendor)(\/|$)/.test(pathname || "")) return null;
 
   return (
-    <div className="fixed bottom-5 right-3 z-50 md:bottom-auto md:right-5 md:top-1/2 md:-translate-y-1/2">
+    // On a property page, mobile has StickyVisitBar pinned to the bottom, so
+    // the FAB sits above it instead of on top of it.
+    <div
+      className={`fixed right-3 z-50 md:bottom-auto md:right-5 md:top-1/2 md:-translate-y-1/2 ${
+        isPropertyDetailPath(pathname) ? "bottom-24" : "bottom-5"
+      }`}
+    >
       {/* Desktop/tablet: always-visible vertical rail, plenty of side margin to not overlap content. */}
       <div className="hidden flex-col items-center gap-1 rounded-full border border-navy-900/8 bg-white/85 p-2 shadow-soft backdrop-blur-md md:flex">
         {items.map(({ href, label, icon: Icon, countKey }) => (

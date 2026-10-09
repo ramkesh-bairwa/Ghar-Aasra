@@ -1,6 +1,7 @@
 "use client";
 
-import { BedDouble, Bath, Ruler, MapPin, Heart, GitCompare } from "lucide-react";
+import { startNavProgress } from "@/components/NavigationProgress";
+import { BedDouble, Bath, Ruler, MapPin, Heart, GitCompare, CalendarCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useUserLists } from "@/lib/userLists";
@@ -34,7 +35,10 @@ export default function PropertyCard({ property }) {
           alt={property.title}
           className="h-52 w-full object-cover transition-transform duration-300 group-hover:scale-105"
         />
-        <span className={`badge-pill absolute right-3 top-3 ${tagColor}`}>{property.tag}</span>
+        <div className="absolute right-3 top-3 flex flex-col items-end gap-1.5">
+          <span className={`badge-pill ${tagColor}`}>{property.tag}</span>
+          {property.sponsored && <span className="badge-pill bg-amber-400 text-navy-950 shadow-soft">★ Sponsored</span>}
+        </div>
         <div className="absolute left-3 top-3 flex gap-2">
           <button
             type="button"
@@ -96,6 +100,19 @@ export default function PropertyCard({ property }) {
             ))}
           </div>
         )}
+        {/* A button, not a nested link — the whole card is already an <a>. */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            startNavProgress();
+            router.push(`/properties/${property.slug}/visit`);
+          }}
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border border-teal-500/40 px-4 py-2.5 text-sm font-semibold text-teal-600 transition-colors hover:bg-teal-500 hover:text-white"
+        >
+          <CalendarCheck size={15} /> Book a free visit
+        </button>
       </div>
     </Link>
   );

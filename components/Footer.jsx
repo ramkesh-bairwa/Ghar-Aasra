@@ -5,9 +5,10 @@ const columns = [
   {
     heading: "Explore",
     links: [
+      { label: "All properties", href: "/properties" },
       { label: "Buy properties", href: "/buy" },
       { label: "Rent properties", href: "/rent" },
-      { label: "Commercial", href: "/commercial" },
+      { label: "Commercial", href: "/commercial", commercial: true },
       { label: "New projects", href: "/projects" },
     ],
   },
@@ -53,15 +54,17 @@ export default async function Footer() {
     <footer className="bg-navy-950 pt-16 text-white/70">
       <div className="container-page grid gap-10 pb-12 lg:grid-cols-[1.4fr,1fr,1fr,1fr,1fr]">
         <div>
-          <a href="/" className="flex items-center gap-2">
-            {settings.logo_url ? (
-              <img src={settings.logo_url} alt={settings.site_title} className="h-9 w-auto object-contain" />
+          <a href="/" className="flex items-center gap-2" aria-label={settings.site_title}>
+            {settings.logo_dark_url || settings.logo_url ? (
+              <img src={settings.logo_dark_url || settings.logo_url} alt={settings.site_title} className="h-14 w-auto max-w-[260px] object-contain" />
             ) : (
-              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-500 text-navy-950">
-                <Home size={18} strokeWidth={2.4} />
-              </span>
+              <>
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-500 text-navy-950">
+                  <Home size={18} strokeWidth={2.4} />
+                </span>
+                <span className="font-display text-xl text-white">{settings.site_title}</span>
+              </>
             )}
-            <span className="font-display text-xl text-white">{settings.site_title}</span>
           </a>
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-white/50">{settings.footer_about_text}</p>
           <div className="mt-5 space-y-2 text-sm">
@@ -102,7 +105,7 @@ export default async function Footer() {
           <div key={col.heading}>
             <h3 className="text-sm font-semibold text-white">{col.heading}</h3>
             <ul className="mt-4 space-y-2.5 text-sm">
-              {col.links.map((l) => (
+              {col.links.filter((l) => !l.commercial || settings.commercial_enabled !== "false").map((l) => (
                 <li key={l.label}>
                   <a href={l.href} className="text-white/55 hover:text-teal-400">
                     {l.label}

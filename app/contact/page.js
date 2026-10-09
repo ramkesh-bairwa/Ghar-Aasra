@@ -4,7 +4,7 @@ import PageHeader from "@/components/PageHeader";
 import EnquiryForm from "@/components/EnquiryForm";
 import { MapPin, Phone, Mail, Clock } from "lucide-react";
 
-export const metadata = { title: "Contact Us — Flex Home" };
+export const metadata = { title: "Contact Us" };
 
 export default function ContactPage() {
   return (

@@ -12,7 +12,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
 
   const rows = await query(
-    `SELECT v.id, v.preferred_date, v.preferred_time, v.message, v.status, v.created_at,
+    `SELECT v.id, v.booking_code, v.preferred_date, v.preferred_time, v.message, v.status, v.created_at,
             p.slug AS property_slug, p.title AS property_title, p.cover_image_url, p.address
      FROM visit_requests v
      LEFT JOIN properties p ON p.id = v.property_id

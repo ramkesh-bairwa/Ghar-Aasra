@@ -3,7 +3,7 @@ import Footer from "@/components/Footer";
 import PageHeader from "@/components/PageHeader";
 import { getStaticPage } from "@/lib/queries";
 
-export const metadata = { title: "Terms & Conditions — Flex Home" };
+export const metadata = { title: "Terms & Conditions" };
 
 export default async function TermsPage() {
   const page = await getStaticPage("terms");

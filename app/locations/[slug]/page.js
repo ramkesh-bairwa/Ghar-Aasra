@@ -7,7 +7,7 @@ import { MapPin } from "lucide-react";
 
 export async function generateMetadata({ params }) {
   const location = await getLocationBySlug(params.slug);
-  return { title: location ? `Properties in ${location.city} — Flex Home` : "Location — Flex Home" };
+  return { title: location ? `Properties in ${location.city}` : "Location" };
 }
 
 export default async function LocationDetailsPage({ params }) {

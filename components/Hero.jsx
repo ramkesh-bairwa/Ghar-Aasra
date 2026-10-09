@@ -1,10 +1,12 @@
 "use client";
 
+import { startNavProgress } from "@/components/NavigationProgress";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Home, KeyRound, Building2, Wallet, BedDouble, Bath, Sofa, X } from "lucide-react";
 import { useSiteSettings } from "@/components/SiteSettingsProvider";
 import LocationAutocomplete from "@/components/LocationAutocomplete";
+import HeroBackground from "@/components/HeroBackground";
 
 const tabs = [
   { label: "Buy", Icon: Home },
@@ -44,8 +46,15 @@ const fieldWrap = "flex items-center gap-2 rounded-xl border border-navy-900/10 
 const fieldSelect = "w-full appearance-none bg-transparent text-sm text-navy-900 focus:outline-none";
 
 export default function Hero() {
-  const { hero_video_url, hero_banner_image_url, hero_heading, hero_subheading, hero_overlay_opacity } =
-    useSiteSettings();
+  const {
+    hero_media_type, hero_video_url, hero_youtube_url, hero_video_on_mobile, hero_banner_image_url,
+    hero_badge_text, hero_heading, hero_subheading, hero_overlay_opacity, commercial_enabled,
+  } = useSiteSettings();
+  // Sites set up before the background-type option had only an uploaded video.
+  const mediaType = hero_media_type === "image" && hero_video_url && !hero_banner_image_url ? "video" : hero_media_type || "image";
+  const commercialOn = commercial_enabled !== "false";
+  const visibleTabs = commercialOn ? tabs : tabs.filter((t) => t.label !== "Commercial");
+  const visibleTypes = commercialOn ? propertyTypes : propertyTypes.filter((t) => t.value !== "office");
   // Preserves the original gradient's shape (top/mid/bottom stops at
   // roughly 89%/67%/100% of the darkest point) while scaling the whole
   // thing by the admin's chosen strength.
@@ -78,6 +87,7 @@ export default function Hero() {
     if (bedrooms) params.set("minBedrooms", bedrooms);
     if (bathrooms) params.set("minBathrooms", bathrooms);
     if (furnishing) params.set("furnishing", furnishing);
+    startNavProgress();
     router.push(`/properties?${params.toString()}`);
   }
 
@@ -86,22 +96,13 @@ export default function Hero() {
       {/* Full-bleed video/image background — pulled up under the sticky header via -mt so the
           nav visually overlays this same section instead of sitting in a bar above it. */}
       <div className="absolute inset-0">
-        {hero_video_url ? (
-          <video
-            src={hero_video_url}
-            autoPlay
-            muted
-            loop
-            playsInline
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <img
-            src={hero_banner_image_url || "https://images.unsplash.com/photo-1613977257363-707ba9348227?q=80&w=1600&auto=format&fit=crop"}
-            alt="Modern villa with pool"
-            className="h-full w-full object-cover"
-          />
-        )}
+        <HeroBackground
+          type={mediaType}
+          imageUrl={hero_banner_image_url}
+          videoUrl={hero_video_url}
+          youtubeUrl={hero_youtube_url}
+          videoOnMobile={hero_video_on_mobile !== "false"}
+        />
         <div
           className="absolute inset-0"
           style={{
@@ -116,9 +117,7 @@ export default function Hero() {
 
       <div className="container-page relative pt-32 pb-[124px] md:pt-36 md:pb-[140px] lg:pt-40 lg:pb-[156px]">
         <div className="flex max-w-2xl flex-col justify-center">
-          <span className="badge-pill w-fit bg-teal-500/15 text-teal-300">
-            12,400+ verified listings across 48 cities
-          </span>
+          {hero_badge_text && <span className="badge-pill w-fit bg-teal-500/15 text-teal-300">{hero_badge_text}</span>}
           <h1 className="mt-5 max-w-xl font-display text-4xl leading-[1.1] text-white md:text-5xl">
             {hero_heading}
           </h1>
@@ -129,18 +128,18 @@ export default function Hero() {
       {/* Search widget, overlapping into the section below */}
       <div className="container-page relative pb-14 md:pb-16">
         <div className="card-surface -mb-24 p-3 shadow-[0_20px_60px_-15px_rgba(11,27,51,0.35)] md:-mb-28 md:p-4">
-          <div className="flex gap-1 border-b border-navy-900/8 px-2 pb-2 md:px-3">
-            {tabs.map(({ label, Icon }) => (
+          <div className="flex gap-1.5 border-b border-navy-900/8 px-1 pb-3 md:gap-2 md:px-3">
+            {visibleTabs.map(({ label, Icon }) => (
               <button
                 key={label}
                 onClick={() => setTab(label)}
-                className={`flex items-center gap-1.5 rounded-t-lg px-4 py-2 text-sm font-semibold transition-colors ${
+                className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-base font-semibold transition-colors md:px-6 md:py-3 md:text-lg ${
                   tab === label
-                    ? "bg-teal-500/10 text-teal-600"
-                    : "text-navy-800/60 hover:text-navy-900"
+                    ? "bg-teal-500 text-white shadow-soft"
+                    : "text-navy-800/65 hover:bg-sand-100 hover:text-navy-900"
                 }`}
               >
-                <Icon size={15} />
+                <Icon size={20} />
                 {label}
               </button>
             ))}
@@ -157,7 +156,7 @@ export default function Hero() {
             <label className={fieldWrap}>
               <Home size={17} className="shrink-0 text-teal-600" />
               <select value={propertyType} onChange={(e) => setPropertyType(e.target.value)} className={fieldSelect}>
-                {propertyTypes.map((t) => (
+                {visibleTypes.map((t) => (
                   <option key={t.label} value={t.value}>{t.label}</option>
                 ))}
               </select>

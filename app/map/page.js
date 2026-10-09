@@ -3,7 +3,7 @@ import Footer from "@/components/Footer";
 import PageHeader from "@/components/PageHeader";
 import PropertyMap from "@/components/PropertyMap";
 
-export const metadata = { title: "Map View — Flex Home" };
+export const metadata = { title: "Map View" };
 
 export default function MapPage() {
   return (

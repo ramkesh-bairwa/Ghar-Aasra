@@ -6,8 +6,12 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, Building2, Layers, Users, Briefcase,
   Newspaper, HelpCircle, MapPin, Inbox, FileText, LogOut, Home, Settings,
-  Tags, ListTree, Sparkles, Ruler, ChevronDown, CalendarClock,
+  Tags, ListTree, Sparkles, ChevronDown, CalendarClock, ShieldCheck, CalendarCheck,
+  Quote, BarChart3, LayoutGrid, LayoutPanelTop, Store, Wallet, PencilRuler, Megaphone, Clapperboard, MapPinned, TrendingUp,
 } from "lucide-react";
+import { clearAdminSessionCache } from "./adminSessionCache";
+import NotificationBell from "@/components/NotificationBell";
+import { useSiteSettings } from "@/components/SiteSettingsProvider";
 
 const navGroups = [
   {
@@ -26,7 +30,8 @@ const navGroups = [
           { href: "/admin/categories", label: "Categories", icon: Tags },
           { href: "/admin/subcategories", label: "Subcategories", icon: ListTree },
           { href: "/admin/amenities", label: "Amenities", icon: Sparkles },
-          { href: "/admin/carpet-area-presets", label: "Carpet Area Presets", icon: Ruler },
+          { href: "/admin/floor-plans", label: "Floor Plans & Sizes", icon: LayoutPanelTop },
+          { href: "/admin/seller-sizes", label: "Seller-added Sizes", icon: PencilRuler },
         ],
       },
       { href: "/admin/projects", label: "New Projects", icon: Layers },
@@ -36,8 +41,19 @@ const navGroups = [
   {
     label: "People",
     items: [
+      { href: "/admin/sellers", label: "Sellers", icon: Store },
+      { href: "/admin/commissions", label: "Seller Commissions", icon: Wallet },
       { href: "/admin/agents", label: "Agents", icon: Users },
       { href: "/admin/developers", label: "Developers", icon: Briefcase },
+    ],
+  },
+  {
+    label: "Growth",
+    items: [
+      { href: "/admin/ads", label: "Ads & Banners", icon: Megaphone },
+      { href: "/admin/reels", label: "Property Reels", icon: Clapperboard },
+      { href: "/admin/localities", label: "Localities", icon: MapPinned },
+      { href: "/admin/demand", label: "Buyer Demand", icon: TrendingUp },
     ],
   },
   {
@@ -46,17 +62,50 @@ const navGroups = [
       { href: "/admin/blog", label: "Blog / News", icon: Newspaper },
       { href: "/admin/faqs", label: "FAQs", icon: HelpCircle },
       { href: "/admin/pages", label: "Static Pages", icon: FileText },
+      { href: "/admin/testimonials", label: "Testimonials", icon: Quote },
+      { href: "/admin/stats", label: "Homepage Stats", icon: BarChart3 },
+      { href: "/admin/home-categories", label: "Property Type Tiles", icon: LayoutGrid },
       { href: "/admin/settings", label: "Site Settings", icon: Settings },
     ],
   },
   {
     label: "Activity",
     items: [
-      { href: "/admin/inquiries", label: "Enquiries", icon: Inbox },
+      { href: "/admin/bookings", label: "Visit Bookings", icon: CalendarCheck },
+      { href: "/admin/inquiries", label: "Enquiries & Callbacks", icon: Inbox },
       { href: "/admin/schedule", label: "Schedule Requests", icon: CalendarClock },
     ],
   },
+  {
+    label: "Admin",
+    // Only ever shown to full admins (sections === null) — see filterGroups.
+    items: [{ href: "/admin/staff", label: "Staff", icon: ShieldCheck }],
+  },
 ];
+
+// "/admin/properties" -> "properties", "/admin" -> "dashboard"
+function sectionOf(href) {
+  if (href === "/admin") return "dashboard";
+  return href.split("/")[2] || "dashboard";
+}
+
+// sections === null means every section is allowed (full admin / legacy admins).
+function filterGroups(groups, sections) {
+  if (sections === null) return groups;
+  const allowed = (href) => sections.includes(sectionOf(href));
+  return groups
+    .map((group) => ({
+      ...group,
+      items: group.items
+        .filter((item) => allowed(item.href) || item.children?.some((c) => allowed(c.href)))
+        .map((item) => {
+          if (!item.children) return item;
+          const children = item.children.filter((c) => allowed(c.href));
+          return children.length ? { ...item, children } : { href: item.href, label: item.label, icon: item.icon };
+        }),
+    }))
+    .filter((group) => group.items.length > 0);
+}
 
 function NavLink({ item, active }) {
   const Icon = item.icon;
@@ -116,12 +165,15 @@ function NavItem({ item, pathname }) {
   );
 }
 
-export default function AdminShell({ children, adminName }) {
+export default function AdminShell({ children, adminName, adminEmail, adminRole, sections = null }) {
   const pathname = usePathname();
+  const { site_title, icon_url } = useSiteSettings();
   const router = useRouter();
+  const visibleGroups = filterGroups(navGroups, sections);
 
   async function logout() {
     await fetch("/api/admin/auth/logout", { method: "POST" });
+    clearAdminSessionCache();
     router.push("/admin/login");
     router.refresh();
   }
@@ -130,10 +182,14 @@ export default function AdminShell({ children, adminName }) {
     <div className="flex h-screen overflow-hidden bg-sand-100">
       <aside className="hidden w-64 shrink-0 flex-col border-r border-white/[0.06] bg-gradient-to-b from-navy-900 via-navy-950 to-navy-950 px-4 py-6 lg:flex">
         <Link href="/" className="flex items-center gap-2 px-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-teal-400 to-teal-600 text-navy-950 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]">
-            <Home size={16} strokeWidth={2.4} />
-          </span>
-          <span className="font-display text-lg text-white">Flex Home</span>
+          {icon_url ? (
+            <img src={icon_url} alt="" className="h-8 w-8 rounded-lg object-contain shadow-[0_0_0_1px_rgba(255,255,255,0.08)]" />
+          ) : (
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-teal-400 to-teal-600 text-navy-950 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]">
+              <Home size={16} strokeWidth={2.4} />
+            </span>
+          )}
+          <span className="truncate font-display text-lg text-white">{site_title}</span>
         </Link>
         <span className="mt-1 px-2 text-xs tracking-wide text-white/35">Admin panel</span>
 
@@ -142,7 +198,7 @@ export default function AdminShell({ children, adminName }) {
             area's scroll along with it (each side scrolls independently,
             following wherever the cursor/wheel actually is). */}
         <nav className="admin-scroll mt-8 flex flex-1 flex-col gap-5 overflow-y-auto pr-1">
-          {navGroups.map((group) => (
+          {visibleGroups.map((group) => (
             <div key={group.label}>
               <div className="px-3 text-[10px] font-semibold uppercase tracking-widest text-teal-400/50">{group.label}</div>
               <div className="mt-1.5 flex flex-col gap-0.5">
@@ -164,10 +220,18 @@ export default function AdminShell({ children, adminName }) {
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <header className="flex h-16 shrink-0 items-center justify-between border-b border-navy-900/8 bg-white px-6 lg:px-8">
-          <span className="text-sm text-navy-800/60">Signed in as <span className="font-medium text-navy-900">{adminName}</span></span>
-          <Link href="/" className="text-sm font-medium text-teal-600 hover:text-teal-700">
-            View site →
-          </Link>
+          <span className="flex items-center gap-2 text-sm text-navy-800/60">
+            Signed in as <span className="font-medium text-navy-900">{adminName}</span>
+            {sections !== null && (
+              <span className="badge-pill bg-navy-900/8 text-navy-800/60 capitalize">{adminRole}</span>
+            )}
+          </span>
+          <div className="flex items-center gap-3">
+            <Link href="/" className="text-sm font-medium text-teal-600 hover:text-teal-700">
+              View site →
+            </Link>
+            <NotificationBell variant="admin" storageKey={`fh_admin_notif_seen_${adminEmail || adminName}`} />
+          </div>
         </header>
         <main className="flex-1 overflow-y-auto px-6 py-8 lg:px-8">{children}</main>
       </div>

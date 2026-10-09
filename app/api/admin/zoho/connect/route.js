@@ -8,6 +8,10 @@ import { getZohoAuthUrl } from "@/lib/zoho";
 export async function GET(request) {
   const admin = requireAdmin();
   if (!admin) return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+  // Linking the company calendar is a full-admin action, not a staff one.
+  if (admin.admin_role && admin.admin_role !== "super_admin") {
+    return NextResponse.json({ error: "Only a full admin can connect Zoho." }, { status: 403 });
+  }
 
   const redirectUri = new URL("/api/admin/zoho/callback", request.url).toString();
   return NextResponse.redirect(getZohoAuthUrl(redirectUri));

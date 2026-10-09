@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Calculator, ArrowRight } from "lucide-react";
 import { useSiteSettings } from "@/components/SiteSettingsProvider";
 
-export default function MortgageCalculator() {
+export default function MortgageCalculator({ title, subtitle }) {
   const { currency_symbol } = useSiteSettings();
   const [price, setPrice] = useState(450000);
   const [downPct, setDownPct] = useState(20);
@@ -34,8 +34,8 @@ export default function MortgageCalculator() {
       <div className="container-page">
         <div className="grid gap-8 lg:grid-cols-[1.2fr,1fr]">
           <div className="card-surface p-6 md:p-8">
-            <h2 className="font-display text-2xl text-navy-900">Mortgage calculator</h2>
-            <p className="mt-1 text-[15px] text-navy-800/60">Estimate your monthly payment before you tour a place.</p>
+            <h2 className="font-display text-2xl text-navy-900">{title}</h2>
+            {subtitle && <p className="mt-1 text-[15px] text-navy-800/60">{subtitle}</p>}
 
             <div className="mt-6 grid gap-5 sm:grid-cols-2">
               <label className="block">

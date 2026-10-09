@@ -3,7 +3,7 @@ import Footer from "@/components/Footer";
 import PageHeader from "@/components/PageHeader";
 import LoanCalculatorPro from "@/components/LoanCalculatorPro";
 
-export const metadata = { title: "Loan Calculator — Flex Home" };
+export const metadata = { title: "Loan Calculator" };
 
 export default function LoanCalculatorPage() {
   return (

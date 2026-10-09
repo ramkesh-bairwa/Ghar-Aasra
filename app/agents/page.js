@@ -4,7 +4,7 @@ import PageHeader from "@/components/PageHeader";
 import { listAgents } from "@/lib/queries";
 import { Mail, Phone, Star, Home as HomeIcon } from "lucide-react";
 
-export const metadata = { title: "Agents & Brokers — Flex Home" };
+export const metadata = { title: "Agents & Brokers" };
 
 export default async function AgentsPage() {
   const agents = await listAgents();

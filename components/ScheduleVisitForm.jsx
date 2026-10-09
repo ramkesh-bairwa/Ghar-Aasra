@@ -4,57 +4,20 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   CalendarDays, Clock, Home, User, Mail, Phone, MessageSquare,
-  CheckCircle2, ArrowRight, MessageCircle, Facebook, ShieldCheck,
+  ArrowRight, MessageCircle, Facebook, ShieldCheck,
   Zap, RefreshCw, MapPin,
 } from "lucide-react";
 import { useAuth } from "@/lib/useAuth";
 import { useSiteSettings } from "@/components/SiteSettingsProvider";
+import BookingCelebration from "@/components/BookingCelebration";
 import { usePropertiesFeed } from "@/lib/usePropertiesFeed";
-
-const DAYS_AHEAD = 21;
-const SLOT_START_MIN = 9 * 60;
-const SLOT_END_MIN = 18 * 60;
-const SLOT_STEP_MIN = 30;
+import { slotConfig, buildDays, buildSlots, dateKey, formatSlotLabel } from "@/lib/visitSlots";
 
 const TRUST_BADGES = [
   { icon: ShieldCheck, label: "Free, no obligation" },
   { icon: Zap, label: "Confirmed within 24h" },
   { icon: RefreshCw, label: "Reschedule anytime" },
 ];
-
-function pad(n) {
-  return String(n).padStart(2, "0");
-}
-function dateKey(d) {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-function buildDays() {
-  const days = [];
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  for (let i = 0; i < DAYS_AHEAD; i++) {
-    const d = new Date(today);
-    d.setDate(d.getDate() + i);
-    days.push(d);
-  }
-  return days;
-}
-function buildSlots() {
-  const slots = [];
-  for (let m = SLOT_START_MIN; m < SLOT_END_MIN; m += SLOT_STEP_MIN) {
-    slots.push(`${pad(Math.floor(m / 60))}:${pad(m % 60)}`);
-  }
-  return slots;
-}
-function formatSlotLabel(hhmm) {
-  const [h, m] = hhmm.split(":").map(Number);
-  const period = h >= 12 ? "PM" : "AM";
-  const hour12 = h % 12 || 12;
-  return `${hour12}:${pad(m)} ${period}`;
-}
-
-const days = buildDays();
-const slots = buildSlots();
 
 function StepCard({ step, icon: Icon, title, subtitle, children }) {
   return (
@@ -77,8 +40,12 @@ function StepCard({ step, icon: Icon, title, subtitle, children }) {
 
 export default function ScheduleVisitForm({ initialPropertySlug }) {
   const { user } = useAuth();
-  const { contact_whatsapp, facebook_url } = useSiteSettings();
+  const settings = useSiteSettings();
+  const { contact_whatsapp, facebook_url } = settings;
   const { properties } = usePropertiesFeed();
+  const config = slotConfig(settings);
+  const days = useMemo(() => buildDays(config.daysAhead), [config.daysAhead]);
+  const slots = useMemo(() => buildSlots(config), [config.start, config.end, config.step]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [propertyId, setPropertyId] = useState("");
   const [selectedDay, setSelectedDay] = useState(days[0]);
@@ -116,7 +83,7 @@ export default function ScheduleVisitForm({ initialPropertySlug }) {
         const [h, m] = s.split(":").map(Number);
         return { time: s, disabled: isToday && h * 60 + m <= nowMinutes };
       }),
-    [isToday, nowMinutes]
+    [isToday, nowMinutes, slots]
   );
 
   const whatsappHref = contact_whatsapp
@@ -142,67 +109,68 @@ export default function ScheduleVisitForm({ initialPropertySlug }) {
       });
       const data = await res.json();
       if (!res.ok) return setError(data.error || "Could not submit your request.");
-      setDone({ day: selectedDay, slot: selectedSlot, property: selectedProperty });
+      setDone({ day: selectedDay, slot: selectedSlot, property: selectedProperty, bookingCode: data.bookingCode, name });
     } finally {
       setSubmitting(false);
     }
   }
 
   if (done) {
+    const doneWhatsapp = contact_whatsapp
+      ? `https://wa.me/${contact_whatsapp.replace(/[^\d]/g, "")}?text=${encodeURIComponent(
+          `Hi! I just requested a property visit${done.bookingCode ? ` (booking ID ${done.bookingCode})` : ""}.`
+        )}`
+      : null;
     return (
-      <div className="mx-auto max-w-lg">
-        <div className="card-surface overflow-hidden">
-          <div className="relative bg-navy-900 px-8 pb-8 pt-10 text-center text-white">
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(20,184,172,0.28),transparent_55%)]" />
-            <span className="relative flex h-16 w-16 items-center justify-center rounded-full bg-teal-500/15 text-teal-400 mx-auto">
-              <CheckCircle2 size={32} />
-            </span>
-            <h2 className="relative mt-5 font-display text-2xl">Request received</h2>
-            <p className="relative mt-2 text-sm text-white/60">
-              Our team will confirm your visit shortly — usually within 24 hours.
-            </p>
-          </div>
-
-          <div className="space-y-3 p-6">
-            {done.property && (
-              <div className="flex items-center gap-3 rounded-xl bg-sand-100 p-3">
-                <img src={done.property.image} alt={done.property.title} className="h-12 w-14 rounded-lg object-cover" />
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-navy-900">{done.property.title}</div>
-                  <div className="flex items-center gap-1 text-xs text-navy-800/50"><MapPin size={11} /> {done.property.city}</div>
-                </div>
-              </div>
-            )}
-            <div className="flex items-center justify-between rounded-xl bg-sand-100 px-4 py-3 text-sm">
-              <span className="flex items-center gap-2 text-navy-800/60"><CalendarDays size={15} className="text-teal-600" /> Date</span>
-              <span className="font-semibold text-navy-900">
-                {done.day.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
-              </span>
-            </div>
-            <div className="flex items-center justify-between rounded-xl bg-sand-100 px-4 py-3 text-sm">
-              <span className="flex items-center gap-2 text-navy-800/60"><Clock size={15} className="text-teal-600" /> Time</span>
-              <span className="font-semibold text-navy-900">{formatSlotLabel(done.slot)}</span>
-            </div>
-
-            <div className="flex flex-col gap-2.5 pt-2 sm:flex-row">
-              <Link href="/properties" className="btn-primary flex-1 justify-center">
-                Browse more properties
-                <ArrowRight size={15} />
-              </Link>
-              {whatsappHref && (
-                <a
-                  href={whatsappHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex flex-1 items-center justify-center gap-2 rounded-full bg-[#25D366] px-6 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-                >
-                  <MessageCircle size={16} /> Confirm on WhatsApp
-                </a>
-              )}
+      <BookingCelebration
+        name={done.name}
+        ribbon="Awaiting confirmation"
+        title="Your visit is booked"
+        subtitle="Please wait for our team to confirm your slot. We usually confirm within 24 hours."
+        bookingCode={done.bookingCode}
+        pending={{
+          when: `${done.day.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} at ${formatSlotLabel(done.slot)}`,
+          eta: "within 24 hours",
+          signedIn: !!user,
+        }}
+      >
+        {done.property && (
+          <div className="flex items-center gap-3 rounded-xl bg-white ring-1 ring-navy-900/5 p-3">
+            <img src={done.property.image} alt={done.property.title} className="h-12 w-14 rounded-lg object-cover" />
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold text-navy-900">{done.property.title}</div>
+              <div className="flex items-center gap-1 text-xs text-navy-800/50"><MapPin size={11} /> {done.property.city}</div>
             </div>
           </div>
+        )}
+        <div className="flex items-center justify-between rounded-xl bg-white ring-1 ring-navy-900/5 px-4 py-3 text-sm">
+          <span className="flex items-center gap-2 text-navy-800/60"><CalendarDays size={15} className="text-teal-600" /> Date</span>
+          <span className="font-semibold text-navy-900">
+            {done.day.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+          </span>
         </div>
-      </div>
+        <div className="flex items-center justify-between rounded-xl bg-white ring-1 ring-navy-900/5 px-4 py-3 text-sm">
+          <span className="flex items-center gap-2 text-navy-800/60"><Clock size={15} className="text-teal-600" /> Time</span>
+          <span className="font-semibold text-navy-900">{formatSlotLabel(done.slot)}</span>
+        </div>
+
+        <div className="flex flex-col gap-2.5 pt-2 sm:flex-row">
+          <Link href="/properties" className="btn-primary flex-1 justify-center">
+            Browse more properties
+            <ArrowRight size={15} />
+          </Link>
+          {doneWhatsapp && (
+            <a
+              href={doneWhatsapp}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-1 items-center justify-center gap-2 rounded-full bg-[#25D366] px-6 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+            >
+              <MessageCircle size={16} /> Confirm on WhatsApp
+            </a>
+          )}
+        </div>
+      </BookingCelebration>
     );
   }
 

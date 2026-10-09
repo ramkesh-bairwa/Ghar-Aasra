@@ -4,7 +4,7 @@ import PageHeader from "@/components/PageHeader";
 import FavoritesGrid from "@/components/FavoritesGrid";
 import RequireAuth from "@/components/RequireAuth";
 
-export const metadata = { title: "My Favorites — Flex Home" };
+export const metadata = { title: "My Favorites" };
 
 export default function FavoritesPage() {
   return (

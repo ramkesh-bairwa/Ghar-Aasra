@@ -2,14 +2,14 @@ import { MapPin, Building } from "lucide-react";
 
 const statusLabel = { presale: "Presale", under_construction: "Under construction", selling: "Selling now", completed: "Completed" };
 
-export default function NewProjects({ projects = [], developers = [], locations = [] }) {
+export default function NewProjects({ projects = [], developers = [], locations = [], title, subtitle }) {
   return (
     <section className="bg-sand-50 py-16">
       <div className="container-page">
         <div className="flex items-end justify-between">
           <div>
-            <h2 className="font-display text-2xl text-navy-900 md:text-3xl">New projects</h2>
-            <p className="mt-1 text-[15px] text-navy-800/60">Developments open for presale or under construction.</p>
+            <h2 className="font-display text-2xl text-navy-900 md:text-3xl">{title}</h2>
+            {subtitle && <p className="mt-1 text-[15px] text-navy-800/60">{subtitle}</p>}
           </div>
           <a href="/projects" className="hidden text-sm font-semibold text-teal-600 hover:text-teal-700 sm:block">
             View all projects

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { requireAdmin } from "@/lib/adminGuard";
+import { requireAdminForResource } from "@/lib/adminGuard";
 
 export async function GET(request, { params }) {
-  const admin = requireAdmin();
-  if (!admin) return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+  const admin = requireAdminForResource("properties");
+  if (!admin) return NextResponse.json({ error: "Not authenticated or not permitted." }, { status: 403 });
   try {
     const rows = await query("SELECT feature FROM property_features WHERE property_id = ?", [params.id]);
     return NextResponse.json({ features: rows.map((r) => r.feature) });
@@ -15,8 +15,8 @@ export async function GET(request, { params }) {
 
 // Replaces the full amenity list for this property with the given array.
 export async function PUT(request, { params }) {
-  const admin = requireAdmin();
-  if (!admin) return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+  const admin = requireAdminForResource("properties");
+  if (!admin) return NextResponse.json({ error: "Not authenticated or not permitted." }, { status: 403 });
 
   const { features } = await request.json();
   if (!Array.isArray(features)) return NextResponse.json({ error: "features must be an array." }, { status: 400 });

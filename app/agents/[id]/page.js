@@ -8,7 +8,7 @@ import { Phone, Mail, MessageCircle, Star, Award } from "lucide-react";
 
 export async function generateMetadata({ params }) {
   const agent = await getAgentBySlug(params.id);
-  return { title: agent ? `${agent.name} — Flex Home Agent` : "Agent — Flex Home" };
+  return { title: agent ? `${agent.name} — Agent` : "Agent" };
 }
 
 export default async function AgentProfilePage({ params }) {

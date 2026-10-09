@@ -1,14 +1,17 @@
-// Seeds the database with demo content: the agents and properties already
-// shown on the site when no database is connected (lib/data.js), inserted
-// as real rows so they're editable from /admin and persist across restarts.
+// Seeds the database with the demo content in database/seed-data.mjs —
+// locations, developers, projects, agents, properties, blog posts, FAQs,
+// static pages, testimonials, homepage stats and property-type tiles — as
+// real rows, so every page reads them from MySQL and they're editable in /admin.
 //
 // Usage: npm run db:seed  (run `npm run db:init` first if you haven't)
-// Safe to re-run — existing rows (matched by email / slug) are updated in
-// place rather than duplicated.
+// Safe to re-run — agents and properties are updated in place; all other
+// content is only inserted when missing, so edits made in /admin are kept.
 
 import "dotenv/config";
 import mysql from "mysql2/promise";
-import { agents as seedAgents, properties as seedProperties } from "../lib/data.js";
+import * as seed from "./seed-data.mjs";
+
+const { agents: seedAgents, properties: seedProperties } = seed;
 
 // Full "Add Property" amenities catalog — matches lib/amenityIcons.js's
 // AMENITY_ICONS keys and AMENITY_CATEGORIES groups. Upserted by name so
@@ -334,7 +337,7 @@ function parseAreaSqm(areaLabel) {
 
 // Deterministic (not random) dummy values for the extended "Add Property"
 // fields — admin panel and database/schema.sql have long since grown these
-// columns, but lib/data.js's demo listings predate them and nothing ever
+// columns, but seed-data.mjs's demo listings predate them and nothing ever
 // backfilled the DB rows, so the property detail page had nothing to show
 // for facing/furnishing/floor/etc. Derived from each property's own index
 // and attributes so re-running the seed keeps producing the same values.
@@ -438,7 +441,7 @@ const LAND_EXCLUDED_CATEGORIES = new Set([
 
 // Deterministic spread across categories (not random) so every property
 // shows a rich, varied set of amenities on the detail page instead of just
-// its 2-5 hand-picked lib/data.js features — while different properties
+// its 2-5 hand-picked seed-data.mjs features — while different properties
 // still end up with different picks within each category.
 function pickAmenities(amenitiesByCategory, categories, index, perCategory = 2) {
   const picked = [];
@@ -451,6 +454,38 @@ function pickAmenities(amenitiesByCategory, categories, index, perCategory = 2) 
   return picked;
 }
 
+function parseMoney(label) {
+  const n = Number(String(label || "").replace(/[^0-9.]/g, ""));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+// "Q2 2027" -> "2027-06-30" (last day of that quarter)
+function quarterToDate(label) {
+  const m = /^Q([1-4])\s+(\d{4})$/.exec(String(label || "").trim());
+  if (!m) return null;
+  return `${m[2]}-${["03-31", "06-30", "09-30", "12-31"][Number(m[1]) - 1]}`;
+}
+
+// "Aug 24, 2026" -> "2026-08-24 00:00:00"
+function toSqlDate(label) {
+  const d = new Date(label);
+  if (Number.isNaN(d.getTime())) return null;
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} 00:00:00`;
+}
+
+// Inserts `row` unless a row matching `where` already exists; returns its id.
+async function insertIfMissing(connection, table, where, row) {
+  const keys = Object.keys(where);
+  const [[existing]] = await connection.query(
+    `SELECT id FROM ${table} WHERE ${keys.map((k) => `${k} = ?`).join(" AND ")} LIMIT 1`,
+    keys.map((k) => where[k])
+  );
+  if (existing) return { id: existing.id, inserted: false };
+  const [result] = await connection.query(`INSERT INTO ${table} SET ?`, [row]);
+  return { id: result.insertId, inserted: true };
+}
+
 async function main() {
   const connection = await mysql.createConnection({
     host: process.env.DB_HOST || "localhost",
@@ -461,6 +496,19 @@ async function main() {
   });
 
   console.log(`Seeding demo data into database "${process.env.DB_NAME || "flexhome"}"...`);
+
+  // ---------- Locations ----------
+  for (const l of seed.locations) {
+    await insertIfMissing(connection, "locations", { slug: l.slug }, {
+      city: l.city, country: l.country, slug: l.slug, cover_image_url: l.image, description: l.description,
+    });
+    // Rows created by schema.sql have no description yet — fill it in without touching admin edits.
+    await connection.query(
+      "UPDATE locations SET description = ? WHERE slug = ? AND (description IS NULL OR description = '')",
+      [l.description, l.slug]
+    );
+  }
+  console.log(`  locations: ${seed.locations.length} ready`);
 
   // ---------- Lookups ----------
   const [locationRows] = await connection.query("SELECT id, city FROM locations");
@@ -499,6 +547,44 @@ async function main() {
     }
   }
   console.log(`  agents: ${seedAgents.length} ready`);
+
+  // ---------- Developers (users + developers rows) ----------
+  const developerIdBySeedId = {};
+  for (const d of seed.developers) {
+    const email = `contact@${d.website || d.slug + ".example"}`;
+    await connection.query(
+      `INSERT INTO users (name, email, password_hash, role, avatar_url)
+       VALUES (?, ?, ?, 'developer', ?)
+       ON DUPLICATE KEY UPDATE id = id`,
+      [d.companyName, email, "$2a$10$seedaccountnologinhashplaceholder000000", d.logo]
+    );
+    const [[userRow]] = await connection.query("SELECT id FROM users WHERE email = ?", [email]);
+    const { id } = await insertIfMissing(connection, "developers", { company_name: d.companyName }, {
+      user_id: userRow.id, company_name: d.companyName, logo_url: d.logo,
+      description: d.description, founded_year: d.foundedYear, website: d.website,
+    });
+    developerIdBySeedId[d.id] = id;
+  }
+  console.log(`  developers: ${seed.developers.length} ready`);
+
+  // ---------- Projects ----------
+  const locationSlugBySeedId = Object.fromEntries(seed.locations.map((l) => [l.id, l.slug]));
+  const [locationSlugRows] = await connection.query("SELECT id, slug FROM locations");
+  const locationIdBySlug = Object.fromEntries(locationSlugRows.map((r) => [r.slug, r.id]));
+  const projectIdBySeedId = {};
+  for (const pr of seed.projects) {
+    const { id } = await insertIfMissing(connection, "projects", { slug: pr.slug }, {
+      name: pr.name, slug: pr.slug,
+      developer_id: developerIdBySeedId[pr.developerId] || null,
+      location_id: locationIdBySlug[locationSlugBySeedId[pr.locationId]] || null,
+      description: pr.description, cover_image_url: pr.image, status: pr.status,
+      handover_date: quarterToDate(pr.handover), starting_price: parseMoney(pr.startingPrice),
+      total_units: pr.totalUnits,
+      amenities: (pr.amenities || []).join("\n"), gallery: (pr.gallery || []).join("\n"),
+    });
+    projectIdBySeedId[pr.id] = id;
+  }
+  console.log(`  projects: ${seed.projects.length} ready`);
 
   // ---------- Amenities master list ----------
   for (const [i, item] of AMENITIES_CATALOG.entries()) {
@@ -548,6 +634,7 @@ async function main() {
       location_id: locationId,
       status: "published",
       agent_id: agentId,
+      project_id: projectIdBySeedId[p.projectId] || null,
       featured: p.featured ? 1 : 0,
       ...extraDetailsFor(p, index, areaSqm),
       ...intelligenceDetailsFor(p, index, p.priceValue),
@@ -565,8 +652,8 @@ async function main() {
       inserted++;
     }
 
-    // Amenities — replace-all, so re-running the seed stays in sync with lib/data.js.
-    // Merges each listing's hand-picked lib/data.js features with a
+    // Amenities — replace-all, so re-running the seed stays in sync with seed-data.mjs.
+    // Merges each listing's hand-picked seed-data.mjs features with a
     // deterministic spread across every amenity category, so the property
     // page's categorized amenities section has real content in every group
     // instead of just whichever 2-5 features happened to be hand-written.
@@ -592,6 +679,61 @@ async function main() {
   }
 
   console.log(`  properties: ${inserted} inserted, ${updated} updated (${seedProperties.length} total)`);
+
+  // ---------- Amenities shown in the public search filter ----------
+  for (const name of seed.amenitiesList) {
+    await connection.query(
+      "INSERT INTO amenities (name, show_in_filters) VALUES (?, 1) ON DUPLICATE KEY UPDATE show_in_filters = 1",
+      [name]
+    );
+  }
+
+  // ---------- Blog posts ----------
+  for (const post of seed.blogPosts) {
+    await insertIfMissing(connection, "blog_posts", { slug: post.slug }, {
+      title: post.title, slug: post.slug, category: post.category, cover_image_url: post.image,
+      excerpt: post.excerpt, content: post.content, status: "published", published_at: toSqlDate(post.date),
+    });
+  }
+  console.log(`  blog posts: ${seed.blogPosts.length} ready`);
+
+  // ---------- FAQs ----------
+  for (const [i, f] of seed.faqs.entries()) {
+    await insertIfMissing(connection, "faqs", { question: f.question }, {
+      question: f.question, answer: f.answer, category: f.category, sort_order: i + 1,
+    });
+  }
+  console.log(`  faqs: ${seed.faqs.length} ready`);
+
+  // ---------- Static pages ----------
+  // schema.sql inserts one-line placeholders; replace those (and only those)
+  // with the full copy so admin edits are never overwritten.
+  for (const [slug, page] of Object.entries(seed.staticPages)) {
+    await connection.query(
+      `INSERT INTO pages (slug, title, content) VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         title = IF(content LIKE '%from the admin panel.', VALUES(title), title),
+         content = IF(content LIKE '%from the admin panel.', VALUES(content), content)`,
+      [slug, page.title, page.content]
+    );
+  }
+  console.log(`  pages: ${Object.keys(seed.staticPages).length} ready`);
+
+  // ---------- Homepage: testimonials, stats, property-type tiles ----------
+  for (const [i, t] of seed.testimonials.entries()) {
+    await insertIfMissing(connection, "testimonials", { name: t.name }, {
+      name: t.name, role: t.role, quote: t.quote, rating: t.rating, sort_order: i + 1,
+    });
+  }
+  for (const [i, st] of seed.stats.entries()) {
+    await insertIfMissing(connection, "site_stats", { label: st.label }, { label: st.label, value: st.value, sort_order: i + 1 });
+  }
+  for (const [i, c] of seed.categories.entries()) {
+    await insertIfMissing(connection, "home_categories", { property_type: c.slug }, {
+      name: c.name, property_type: c.slug, icon: c.icon, sort_order: i + 1,
+    });
+  }
+  console.log(`  homepage: ${seed.testimonials.length} testimonials, ${seed.stats.length} stats, ${seed.categories.length} category tiles ready`);
   await connection.end();
   console.log("Done.");
 }

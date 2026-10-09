@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { requireAdmin } from "@/lib/adminGuard";
+import { requireAdminForResource } from "@/lib/adminGuard";
 
 export async function GET(request, { params }) {
-  const admin = requireAdmin();
-  if (!admin) return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+  const admin = requireAdminForResource("properties");
+  if (!admin) return NextResponse.json({ error: "Not authenticated or not permitted." }, { status: 403 });
   try {
     const rows = await query(
       "SELECT image_url FROM property_images WHERE property_id = ? ORDER BY sort_order ASC, id ASC",
@@ -18,8 +18,8 @@ export async function GET(request, { params }) {
 
 // Replaces the full gallery for this property with the given ordered array of URLs.
 export async function PUT(request, { params }) {
-  const admin = requireAdmin();
-  if (!admin) return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+  const admin = requireAdminForResource("properties");
+  if (!admin) return NextResponse.json({ error: "Not authenticated or not permitted." }, { status: 403 });
 
   const { images } = await request.json();
   if (!Array.isArray(images)) return NextResponse.json({ error: "images must be an array." }, { status: 400 });

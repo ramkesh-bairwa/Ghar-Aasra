@@ -2,19 +2,40 @@ import Script from "next/script";
 import "./globals.css";
 import { getAllSiteSettings } from "@/lib/queries";
 import { fontStack } from "@/lib/siteSettingsSchema";
+import { customFavicon, faviconVersion } from "@/lib/themeIcon";
 import { SiteSettingsProvider } from "@/components/SiteSettingsProvider";
 import { AuthProvider } from "@/lib/useAuth";
 import { UserListsProvider } from "@/lib/userLists";
 import FloatingDock from "@/components/FloatingDock";
 import ScheduleVisitDock from "@/components/ScheduleVisitDock";
+import WhatsAppFloat from "@/components/WhatsAppFloat";
+import AdPopup from "@/components/ads/AdPopup";
+import NavigationProgress from "@/components/NavigationProgress";
 
 export async function generateMetadata() {
   const settings = await getAllSiteSettings();
+  const custom = customFavicon(settings);
+  const v = faviconVersion(settings);
   const title = settings.site_tagline ? `${settings.site_title} — ${settings.site_tagline}` : settings.site_title;
   return {
-    title,
+    // Pages set a bare title ("Contact Us"); the site name from admin
+    // settings is appended here so no page hardcodes the brand.
+    title: { default: title, template: `%s — ${settings.site_title}` },
     description: settings.meta_description,
-    icons: settings.favicon_url ? { icon: settings.favicon_url } : undefined,
+    // A custom favicon from Site Settings wins; otherwise the icon is drawn
+    // in the theme colours (app/theme-icon), so it follows theme changes.
+    // URLs carry a version so browsers refetch as soon as it changes.
+    icons: custom
+      ? { icon: `${custom}?v=${v}`, shortcut: `${custom}?v=${v}`, apple: `${custom}?v=${v}` }
+      : {
+          icon: [
+            { url: `/theme-icon?v=${v}`, type: "image/svg+xml" },
+            { url: `/theme-icon?size=48&v=${v}`, type: "image/png", sizes: "48x48" },
+            { url: `/theme-icon?size=32&v=${v}`, type: "image/png", sizes: "32x32" },
+          ],
+          shortcut: `/theme-icon?size=32&v=${v}`,
+          apple: `/theme-icon?size=180&v=${v}`,
+        },
     openGraph: {
       title,
       description: settings.meta_description,
@@ -51,12 +72,15 @@ export default async function RootLayout({ children }) {
   return (
     <html lang="en" style={themeVars}>
       <body className="font-sans antialiased">
+        <NavigationProgress />
         <SiteSettingsProvider settings={settings}>
           <AuthProvider>
             <UserListsProvider>
               {children}
               <ScheduleVisitDock />
               <FloatingDock />
+              <WhatsAppFloat />
+              <AdPopup />
             </UserListsProvider>
           </AuthProvider>
         </SiteSettingsProvider>

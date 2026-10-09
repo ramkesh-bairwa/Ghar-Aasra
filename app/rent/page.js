@@ -1,6 +1,6 @@
 import PropertyListingPage from "@/components/PropertyListingPage";
 
-export const metadata = { title: "Rent Properties — Flex Home" };
+export const metadata = { title: "Rent Properties" };
 
 export default function Page({ searchParams }) {
   return (

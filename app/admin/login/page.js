@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Home, Lock } from "lucide-react";
+import { useSiteSettings } from "@/components/SiteSettingsProvider";
 
 export default function AdminLoginPage() {
   const router = useRouter();
+  const { site_title, icon_url } = useSiteSettings();
   const [email, setEmail] = useState("admin@flexhome.com");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -33,10 +35,14 @@ export default function AdminLoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-navy-950 px-4">
       <div className="w-full max-w-sm">
         <div className="flex items-center justify-center gap-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-500 text-navy-950">
-            <Home size={18} strokeWidth={2.4} />
-          </span>
-          <span className="font-display text-xl text-white">Flex Home</span>
+          {icon_url ? (
+            <img src={icon_url} alt="" className="h-10 w-10 rounded-lg object-contain" />
+          ) : (
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-500 text-navy-950">
+              <Home size={18} strokeWidth={2.4} />
+            </span>
+          )}
+          <span className="font-display text-xl text-white">{site_title}</span>
         </div>
         <p className="mt-1 text-center text-xs text-white/40">Admin panel</p>
 

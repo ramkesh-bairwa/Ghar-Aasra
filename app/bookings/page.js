@@ -1,11 +1,10 @@
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import PageHeader from "@/components/PageHeader";
-import BookingsList from "@/components/BookingsList";
-import VisitRequestsList from "@/components/VisitRequestsList";
+import MyVisitsView from "@/components/MyVisitsView";
 import RequireAuth from "@/components/RequireAuth";
 
-export const metadata = { title: "My Visits — Flex Home" };
+export const metadata = { title: "My Visits" };
 
 export default function BookingsPage() {
   return (
@@ -18,8 +17,7 @@ export default function BookingsPage() {
           subtitle="Track the property viewings you've scheduled with our agents."
         />
         <RequireAuth>
-          <BookingsList />
-          <VisitRequestsList />
+          <MyVisitsView />
         </RequireAuth>
       </main>
       <Footer />

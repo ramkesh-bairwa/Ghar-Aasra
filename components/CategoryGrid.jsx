@@ -1,22 +1,25 @@
 import { Building2, Home, Warehouse, Trees, Store, Briefcase } from "lucide-react";
-import { categories } from "@/lib/data";
+import { listHomeCategories } from "@/lib/queries";
 
 const icons = { "building-2": Building2, home: Home, warehouse: Warehouse, trees: Trees, store: Store, briefcase: Briefcase };
 
-export default function CategoryGrid() {
+export default async function CategoryGrid({ title, subtitle }) {
+  const categories = await listHomeCategories();
+  if (!categories.length) return null;
+
   return (
     <section className="bg-sand-50 py-14">
       <div className="container-page">
         <div className="flex items-end justify-between">
           <div>
-            <h2 className="font-display text-2xl text-navy-900 md:text-3xl">Browse by property type</h2>
-            <p className="mt-1 text-[15px] text-navy-800/60">Jump straight to the kind of place you're picturing.</p>
+            <h2 className="font-display text-2xl text-navy-900 md:text-3xl">{title}</h2>
+            {subtitle && <p className="mt-1 text-[15px] text-navy-800/60">{subtitle}</p>}
           </div>
         </div>
 
         <div className="mt-7 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
           {categories.map((c) => {
-            const Icon = icons[c.icon];
+            const Icon = icons[c.icon] || Home;
             return (
               <a
                 key={c.name}

@@ -4,7 +4,7 @@ import PageHeader from "@/components/PageHeader";
 import { listProjects, listDevelopers, listLocations } from "@/lib/queries";
 import { MapPin, Building } from "lucide-react";
 
-export const metadata = { title: "New Projects — Flex Home" };
+export const metadata = { title: "New Projects" };
 
 export default async function ProjectsPage() {
   const [projects, developers, locations] = await Promise.all([listProjects(), listDevelopers(), listLocations()]);

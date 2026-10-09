@@ -4,7 +4,7 @@ import PageHeader from "@/components/PageHeader";
 import { listLocations } from "@/lib/queries";
 import { ArrowRight } from "lucide-react";
 
-export const metadata = { title: "Properties by Location — Flex Home" };
+export const metadata = { title: "Properties by Location" };
 
 export default async function LocationsPage() {
   const locations = await listLocations();

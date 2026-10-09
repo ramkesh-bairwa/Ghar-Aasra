@@ -6,8 +6,10 @@ import {
   Plus, Trash2, MapPinned, Loader2, Save, Check,
   Info, DollarSign, MapPin, Sparkles, Image as ImageIcon,
   ClipboardCheck, ChevronRight, ChevronLeft, Upload, X, FileText, Shield, TrendingUp,
+  LayoutPanelTop, ArrowUp, ArrowDown, Copy,
 } from "lucide-react";
 import { getAmenityIcon, AMENITY_CATEGORIES } from "@/lib/amenityIcons";
+import { useDialog } from "@/components/ConfirmDialog";
 
 const LISTING_TYPES = ["sale", "rent", "pg", "lease"];
 const PROPERTY_TYPES = ["apartment", "villa", "house", "plot", "office", "shop", "commercial", "land"];
@@ -31,6 +33,7 @@ const STEPS = [
   { key: "pricing",   label: "Pricing",       Icon: DollarSign },
   { key: "amenities", label: "Amenities",     Icon: Sparkles },
   { key: "media",     label: "Media",         Icon: Upload },
+  { key: "floorplans", label: "Floor Plans",  Icon: LayoutPanelTop },
   { key: "legal",     label: "Legal & Owner", Icon: Shield },
   { key: "intelligence", label: "Intelligence", Icon: TrendingUp },
   { key: "review",    label: "Review",        Icon: ClipboardCheck },
@@ -67,6 +70,11 @@ async function uploadFile(file) {
   return data.url;
 }
 
+const emptyPlan = {
+  floor_plan_type_id: "", floor_plan_size_id: "", label: "", bedrooms: "", bathrooms: "", balconies: "", carpet_area_sqm: "", built_up_area_sqm: "",
+  super_area_sqm: "", price: "", image_url: "",
+};
+
 export default function PropertyForm({ propertyId }) {
   const router = useRouter();
   const isNew = !propertyId;
@@ -74,12 +82,13 @@ export default function PropertyForm({ propertyId }) {
   const [form, setForm] = useState(emptyForm);
   const [features, setFeatures] = useState([]);
   const [images, setImages] = useState([]);
+  const [floorPlans, setFloorPlans] = useState([]);
   const [locations, setLocations] = useState([]);
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
   const [agents, setAgents] = useState([]);
   const [amenities, setAmenities] = useState([]);
-  const [presets, setPresets] = useState([]);
+  const [planTypes, setPlanTypes] = useState([]);
   const [presetId, setPresetId] = useState("");
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
@@ -95,14 +104,14 @@ export default function PropertyForm({ propertyId }) {
       fetch("/api/admin/subcategories").then((r) => r.ok ? r.json() : { rows: [] }),
       fetch("/api/admin/agents").then((r) => r.ok ? r.json() : { rows: [] }),
       fetch("/api/admin/amenities").then((r) => r.ok ? r.json() : { rows: [] }),
-      fetch("/api/admin/carpet_area_presets").then((r) => r.ok ? r.json() : { rows: [] }),
-    ]).then(([loc, cat, sub, ag, am, cap]) => {
+      fetch("/api/admin/floor-plan-types").then((r) => r.ok ? r.json() : { types: [] }),
+    ]).then(([loc, cat, sub, ag, am, fpt]) => {
       setLocations(loc.rows || []);
       setCategories(cat.rows || []);
       setSubcategories(sub.rows || []);
       setAgents(ag.rows || []);
       setAmenities(am.rows || []);
-      setPresets(cap.rows || []);
+      setPlanTypes(fpt.types || []);
     });
   }, []);
 
@@ -112,7 +121,8 @@ export default function PropertyForm({ propertyId }) {
       fetch(`/api/admin/properties/${propertyId}`).then((r) => r.json()),
       fetch(`/api/admin/properties/${propertyId}/features`).then((r) => r.json()),
       fetch(`/api/admin/properties/${propertyId}/images`).then((r) => r.json()),
-    ]).then(([propData, featData, imgData]) => {
+      fetch(`/api/admin/properties/${propertyId}/floor-plans`).then((r) => r.json()).catch(() => ({})),
+    ]).then(([propData, featData, imgData, planData]) => {
       if (propData.row) {
         const row = propData.row;
         setForm({
@@ -126,6 +136,11 @@ export default function PropertyForm({ propertyId }) {
       }
       setFeatures(featData.features || []);
       setImages((imgData.images || []).map((url) => ({ url, uploading: false })));
+      // MySQL DECIMALs arrive as "52.00"; show them as 52.
+      setFloorPlans((planData.floorPlans || []).map((p) => ({
+        ...emptyPlan,
+        ...Object.fromEntries(Object.entries(p).map(([k, v]) => [k, v === null ? "" : /^\d+\.\d+$/.test(String(v)) ? String(Number(v)) : v])),
+      })));
     }).finally(() => setLoading(false));
   }, [propertyId, isNew]);
 
@@ -133,10 +148,25 @@ export default function PropertyForm({ propertyId }) {
     () => subcategories.filter((s) => String(s.category_id) === String(form.category_id)),
     [subcategories, form.category_id]
   );
-  const filteredPresets = useMemo(
-    () => presets.filter((p) => String(p.subcategory_id) === String(form.subcategory_id)),
-    [presets, form.subcategory_id]
-  );
+  const selectedSubName = subcategories.find((s) => String(s.id) === String(form.subcategory_id))?.name || "";
+  // Quick presets come from the same Floor Plans & Sizes master list as the
+  // Floor Plans step, so a size is defined once and used everywhere. Sizes
+  // labelled like this property's subcategory (e.g. "Apartment") come first.
+  const filteredPresets = useMemo(() => {
+    const all = planTypes.flatMap((t) =>
+      (t.sizes || []).map((sz) => ({
+        id: `${t.id}:${sz.id}`,
+        label: sz.label ? `${t.name} · ${sz.label}` : t.name,
+        carpet_area_sqm: sz.carpet_area_sqm,
+        built_up_area_sqm: sz.built_up_area_sqm,
+        bedrooms: t.bedrooms,
+        bathrooms: t.bathrooms,
+        balconies: t.balconies,
+        matches: !!selectedSubName && String(sz.label || "").toLowerCase() === selectedSubName.toLowerCase(),
+      }))
+    );
+    return [...all.filter((p) => p.matches), ...all.filter((p) => !p.matches)];
+  }, [planTypes, selectedSubName]);
 
   const selectedCity = locations.find((l) => String(l.id) === String(form.location_id));
   const selectedAgent = agents.find((a) => String(a.id) === String(form.agent_id));
@@ -147,9 +177,16 @@ export default function PropertyForm({ propertyId }) {
 
   function applyPreset(id) {
     setPresetId(id);
-    const p = presets.find((p) => String(p.id) === String(id));
+    const p = filteredPresets.find((p) => String(p.id) === String(id));
     if (!p) return;
-    setForm((f) => ({ ...f, carpet_area_sqm: p.carpet_area_sqm, built_up_area_sqm: p.built_up_area_sqm ?? f.built_up_area_sqm, bedrooms: p.bedrooms ?? f.bedrooms }));
+    setForm((f) => ({
+      ...f,
+      carpet_area_sqm: p.carpet_area_sqm,
+      built_up_area_sqm: p.built_up_area_sqm ?? f.built_up_area_sqm,
+      bedrooms: p.bedrooms ?? f.bedrooms,
+      bathrooms: p.bathrooms ?? f.bathrooms,
+      balconies: p.balconies ?? f.balconies,
+    }));
   }
 
   function toggleFeature(name) {
@@ -243,6 +280,10 @@ export default function PropertyForm({ propertyId }) {
           method: "PUT", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ images: images.map((i) => i.url).filter(Boolean) }),
         }),
+        fetch(`/api/admin/properties/${id}/floor-plans`, {
+          method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ floorPlans: floorPlans.filter((p) => p.label.trim()) }),
+        }),
       ]);
       router.push("/admin/properties"); router.refresh();
     } catch { setError("Save failed."); setSaving(false); }
@@ -268,14 +309,15 @@ export default function PropertyForm({ propertyId }) {
 
       <div className="mt-6 space-y-4">
         {step === 0 && <StepBasic form={form} upd={upd} slugify={slugify} categories={categories} filteredSubs={filteredSubs} agents={agents} setPresetId={setPresetId} ic={ic} />}
-        {step === 1 && <StepDetails form={form} upd={upd} filteredPresets={filteredPresets} presetId={presetId} applyPreset={applyPreset} setPresetId={setPresetId} ic={ic} />}
+        {step === 1 && <StepDetails form={form} upd={upd} setForm={setForm} floorPlans={floorPlans} goToFloorPlans={() => setStep(6)} filteredPresets={filteredPresets} presetId={presetId} applyPreset={applyPreset} setPresetId={setPresetId} ic={ic} />}
         {step === 2 && <StepLocation form={form} upd={upd} locations={locations} selectedCity={selectedCity} geocoding={geocoding} geocodeMsg={geocodeMsg} lookupCoordinates={lookupCoordinates} ic={ic} />}
         {step === 3 && <StepPricing form={form} upd={upd} ic={ic} />}
         {step === 4 && <StepAmenities amenities={amenities} features={features} toggleFeature={toggleFeature} />}
         {step === 5 && <StepMedia form={form} upd={upd} images={images} setImages={setImages} addGalleryImages={addGalleryImages} uploadingKey={uploadingKey} handleUpload={handleUpload} ic={ic} />}
-        {step === 6 && <StepLegal form={form} upd={upd} ic={ic} />}
-        {step === 7 && <StepIntelligence form={form} upd={upd} ic={ic} />}
-        {step === 8 && <StepReview form={form} features={features} images={images} selectedCity={selectedCity} selectedAgent={selectedAgent} selectedCategory={selectedCategory} selectedSub={selectedSub} />}
+        {step === 6 && <StepFloorPlans form={form} upd={upd} floorPlans={floorPlans} setFloorPlans={setFloorPlans} planTypes={planTypes} subName={selectedSub?.name} uploadingKey={uploadingKey} handleUpload={handleUpload} ic={ic} />}
+        {step === 7 && <StepLegal form={form} upd={upd} ic={ic} />}
+        {step === 8 && <StepIntelligence form={form} upd={upd} ic={ic} />}
+        {step === 9 && <StepReview form={form} features={features} images={images} floorPlans={floorPlans} selectedCity={selectedCity} selectedAgent={selectedAgent} selectedCategory={selectedCategory} selectedSub={selectedSub} />}
       </div>
 
       <div className="sticky bottom-0 z-10 mt-6 flex items-center justify-between rounded-xl2 border border-navy-900/8 bg-white/95 p-4 shadow-card backdrop-blur">
@@ -366,16 +408,84 @@ function StepBasic({ form, upd, slugify, categories, filteredSubs, agents, setPr
 }
 
 // ── Step 2: Details ──────────────────────────────────────────────────────────
-function StepDetails({ form, upd, filteredPresets, presetId, applyPreset, setPresetId, ic }) {
+// The smallest floor plan ("starts from") — what the headline areas and
+// bedroom count on cards, search filters and the property header should show
+// for a listing with several configurations.
+function smallestPlan(plans) {
+  const withArea = plans.filter((p) => Number(p.carpet_area_sqm) > 0);
+  if (!withArea.length) return null;
+  return withArea.reduce((a, b) => (Number(b.carpet_area_sqm) < Number(a.carpet_area_sqm) ? b : a));
+}
+
+function headlineFromPlan(plan) {
+  const v = (x) => (x === "" || x == null ? undefined : String(x));
+  return Object.fromEntries(
+    Object.entries({
+      carpet_area_sqm: v(plan.carpet_area_sqm),
+      built_up_area_sqm: v(plan.built_up_area_sqm),
+      bedrooms: v(plan.bedrooms),
+      bathrooms: v(plan.bathrooms),
+      balconies: v(plan.balconies),
+    }).filter(([, val]) => val !== undefined)
+  );
+}
+
+// Headline numbers vs. the property's floor plans. Saving syncs them anyway
+// (lib/propertyFloorPlans.js); this shows it up front, with a button to
+// apply the smallest plan's figures right away.
+function FloorPlanSync({ form, setForm, floorPlans, goToFloorPlans }) {
+  const plans = floorPlans.filter((p) => String(p.label || "").trim());
+  if (!plans.length) return null;
+  const smallest = smallestPlan(plans);
+  const areas = plans.map((p) => Number(p.carpet_area_sqm)).filter((n) => n > 0);
+  const beds = plans.filter((p) => p.bedrooms !== "" && p.bedrooms != null).map((p) => Number(p.bedrooms));
+  const range = (list, unit = "") =>
+    !list.length ? "—" : Math.min(...list) === Math.max(...list) ? `${Math.min(...list)}${unit}` : `${Math.min(...list)}–${Math.max(...list)}${unit}`;
+  const target = smallest ? headlineFromPlan(smallest) : {};
+  const inSync = Object.entries(target).every(([k, val]) => Number(form[k]) === Number(val));
+
+  return (
+    <div className={`rounded-xl p-3 text-sm ring-1 ${inSync ? "bg-teal-500/5 ring-teal-500/20" : "bg-amber-500/10 ring-amber-500/30"}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className={`font-semibold ${inSync ? "text-teal-700" : "text-amber-800"}`}>
+            {inSync ? "In sync with floor plans" : "Will be updated to match the floor plans when you save"}
+          </div>
+          <div className="text-xs text-navy-800/60">
+            {plans.length} floor plan{plans.length > 1 ? "s" : ""}: {range(areas, " m²")} carpet · {range(beds)} bed.
+            {!inSync && smallest && ` Headline should start from ${smallest.label} (${Number(smallest.carpet_area_sqm)} m²).`}
+          </div>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <button type="button" onClick={goToFloorPlans} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-navy-800/70 ring-1 ring-navy-900/10 hover:bg-white">
+            Edit floor plans
+          </button>
+          {!inSync && smallest && (
+            <button
+              type="button"
+              onClick={() => setForm((f) => ({ ...f, ...target }))}
+              className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
+            >
+              Match floor plans
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StepDetails({ form, upd, setForm, floorPlans, goToFloorPlans, filteredPresets, presetId, applyPreset, setPresetId, ic }) {
   return (
     <>
+      <FloorPlanSync form={form} setForm={setForm} floorPlans={floorPlans} goToFloorPlans={goToFloorPlans} />
       <Section title="Room Configuration">
         {filteredPresets.length > 0 && (
-          <Field label="Quick preset (BHK)" hint="Auto-fills area and bedroom count below.">
+          <Field label="Quick preset (from Floor Plans & Sizes)" hint="Auto-fills rooms and areas below.">
             <select value={presetId} onChange={(e) => applyPreset(e.target.value)} className={ic}>
               <option value="">Custom — enter manually</option>
               {filteredPresets.map((p) => (
-                <option key={p.id} value={p.id}>{p.label} — {p.carpet_area_sqm} m²{p.bedrooms != null ? ` · ${p.bedrooms} bed` : ""}</option>
+                <option key={p.id} value={p.id}>{p.label} — {Number(p.carpet_area_sqm)} m²{p.bedrooms ? ` · ${p.bedrooms} bed` : ""}</option>
               ))}
             </select>
           </Field>
@@ -611,6 +721,10 @@ function StepAmenities({ amenities, features, toggleFeature }) {
 // ── Step 6: Media ────────────────────────────────────────────────────────────
 function StepMedia({ form, upd, images, setImages, addGalleryImages, uploadingKey, handleUpload, ic }) {
   const galleryRef = useRef();
+  const { confirm: ask, dialog } = useDialog();
+  const confirmRemove = (what, fn) => async () => {
+    if (await ask({ title: `Remove ${what}?`, message: "It will be removed from this property when you save.", confirmLabel: "Remove" })) fn();
+  };
   return (
     <>
       <Section title="Cover Image">
@@ -618,7 +732,7 @@ function StepMedia({ form, upd, images, setImages, addGalleryImages, uploadingKe
           value={form.cover_image_url}
           uploading={uploadingKey === "cover"}
           onFile={(file) => handleUpload("cover", file, (url) => upd("cover_image_url", url))}
-          onRemove={() => upd("cover_image_url", "")}
+          onRemove={confirmRemove("the cover image", () => upd("cover_image_url", ""))}
         />
       </Section>
       <Section title="Photo Gallery">
@@ -632,7 +746,7 @@ function StepMedia({ form, upd, images, setImages, addGalleryImages, uploadingKe
               ) : img.url ? (
                 <>
                   <img src={img.url} alt="" className="h-full w-full object-cover" />
-                  <button type="button" onClick={() => setImages((prev) => prev.filter((_, idx) => idx !== i))}
+                  <button type="button" onClick={confirmRemove("this photo", () => setImages((prev) => prev.filter((_, idx) => idx !== i)))}
                     className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white hover:bg-red-500 transition-colors">
                     <X size={12} />
                   </button>
@@ -656,31 +770,225 @@ function StepMedia({ form, upd, images, setImages, addGalleryImages, uploadingKe
           <FileUploadRow value={form.video_url} uploading={uploadingKey === "video"} accept="video/*"
             placeholder="Upload a video file (MP4, WebM)"
             onFile={(file) => handleUpload("video", file, (url) => upd("video_url", url))}
-            onRemove={() => upd("video_url", "")} />
+            onRemove={confirmRemove("the video", () => upd("video_url", ""))} />
         </Field>
         <Field label="360° Virtual tour URL" hint="Paste an embed URL from Matterport, Kuula, etc.">
           <input value={form.virtual_tour_url} onChange={(e) => upd("virtual_tour_url", e.target.value)} className={ic} placeholder="https://my.matterport.com/show/?m=..." />
         </Field>
       </Section>
       <Section title="Documents">
-        <Field label="Floor plan">
-          <FileUploadRow value={form.floor_plan_url} uploading={uploadingKey === "floor_plan"} accept="image/*,.pdf"
-            placeholder="Upload floor plan (image or PDF)"
-            onFile={(file) => handleUpload("floor_plan", file, (url) => upd("floor_plan_url", url))}
-            onRemove={() => upd("floor_plan_url", "")} />
-        </Field>
+        <p className="text-xs text-navy-800/45">Floor plans and the plot / site plan are in the next step, Floor Plans.</p>
         <Field label="Brochure / PDF">
           <FileUploadRow value={form.brochure_url} uploading={uploadingKey === "brochure"} accept=".pdf,image/*"
             placeholder="Upload brochure PDF"
             onFile={(file) => handleUpload("brochure", file, (url) => upd("brochure_url", url))}
-            onRemove={() => upd("brochure_url", "")} />
+            onRemove={confirmRemove("the brochure", () => upd("brochure_url", ""))} />
         </Field>
       </Section>
+      {dialog}
     </>
   );
 }
 
-// ── Step 7: Legal & Owner ────────────────────────────────────────────────────
+// ── Step 7: Floor Plans ──────────────────────────────────────────────────────
+// One card per unit configuration (1 BHK, 2 BHK…) with its own areas, price
+// and floor plan drawing; plus the plot / site plan for the whole property.
+function StepFloorPlans({ form, upd, floorPlans, setFloorPlans, planTypes, subName, uploadingKey, handleUpload, ic }) {
+  const [pickType, setPickType] = useState("");
+  const [pickSize, setPickSize] = useState("");
+  const { confirm: ask, dialog } = useDialog();
+  const typeById = (id) => planTypes.find((t) => String(t.id) === String(id));
+  // Sizes labelled like this property's type (e.g. "Apartment") come first.
+  const sizesFor = (type) => {
+    const sizes = type?.sizes || [];
+    const match = (sz) => subName && String(sz.label || "").toLowerCase() === subName.toLowerCase();
+    return [...sizes.filter(match), ...sizes.filter((sz) => !match(sz))];
+  };
+  const sizeText = (sz) => [sz.label, `${Number(sz.carpet_area_sqm)} m² carpet`, sz.built_up_area_sqm && `${Number(sz.built_up_area_sqm)} m² built-up`].filter(Boolean).join(" · ");
+
+  // Values a master type + size fill into a plan (areas copied, so later
+  // master edits don't change this property).
+  function fromMaster(typeId, sizeId) {
+    const type = typeById(typeId);
+    if (!type) return { floor_plan_type_id: "", floor_plan_size_id: "" };
+    const size = type.sizes.find((sz) => String(sz.id) === String(sizeId));
+    const v = (x) => (x == null ? "" : String(x));
+    return {
+      floor_plan_type_id: type.id,
+      floor_plan_size_id: size?.id || "",
+      label: size?.label && type.sizes.length > 1 ? `${type.name} · ${size.label}` : type.name,
+      bedrooms: v(type.bedrooms), bathrooms: v(type.bathrooms), balconies: v(type.balconies),
+      ...(size ? { carpet_area_sqm: v(size.carpet_area_sqm), built_up_area_sqm: v(size.built_up_area_sqm), super_area_sqm: v(size.super_area_sqm) } : {}),
+    };
+  }
+
+  function choosePickType(id) {
+    setPickType(id);
+    setPickSize(sizesFor(typeById(id))[0]?.id || "");
+  }
+  function addPicked() {
+    add(fromMaster(pickType, pickSize));
+    setPickType("");
+    setPickSize("");
+  }
+
+  const add = (plan) => {
+    setFloorPlans((list) => [...list, { ...emptyPlan, ...plan }]);
+    // Keep the headline in step: the first plan fills an empty headline area.
+    if (!floorPlans.length && !form.carpet_area_sqm && Number(plan.carpet_area_sqm) > 0) {
+      for (const [k, val] of Object.entries(headlineFromPlan(plan))) upd(k, val);
+    }
+  };
+  const change = (i, key, value) => setFloorPlans((list) => list.map((p, idx) => (idx === i ? { ...p, [key]: value } : p)));
+  const remove = async (i) => {
+    const plan = floorPlans[i];
+    const ok = await ask({
+      title: `Remove ${plan.label || "this floor plan"}?`,
+      message: `Its areas${plan.image_url ? ", price and uploaded plan drawing" : " and price"} will be removed from this property when you save.`,
+      confirmLabel: "Remove",
+    });
+    if (ok) setFloorPlans((list) => list.filter((_, idx) => idx !== i));
+  };
+  const duplicate = (i) => setFloorPlans((list) => [...list.slice(0, i + 1), { ...list[i], label: `${list[i].label} (copy)` }, ...list.slice(i + 1)]);
+  const move = (i, dir) => setFloorPlans((list) => {
+    const j = i + dir;
+    if (j < 0 || j >= list.length) return list;
+    const next = [...list];
+    [next[i], next[j]] = [next[j], next[i]];
+    return next;
+  });
+  const isPdf = (url) => /\.pdf(\?|#|$)/i.test(url || "");
+
+  return (
+    <>
+      <Section title="Floor plans by configuration">
+        <p className="-mt-1 text-xs text-navy-800/50">
+          Add each unit type on offer (1 BHK, 2 BHK, 3 BHK…) with its carpet area, price and floor plan drawing. Buyers switch between them on the property page.
+        </p>
+        <div className="grid gap-2 rounded-xl bg-teal-500/5 p-3 ring-1 ring-teal-500/15 sm:grid-cols-[1fr,1.4fr,auto,auto] sm:items-center">
+          <select value={pickType} onChange={(e) => choosePickType(e.target.value)} className={ic} aria-label="Floor plan">
+            <option value="">Choose floor plan…</option>
+            {planTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+          <select value={pickSize} onChange={(e) => setPickSize(e.target.value)} disabled={!pickType} className={`${ic} disabled:bg-sand-50 disabled:text-navy-800/40`} aria-label="Size">
+            <option value="">{pickType ? "No standard size (enter areas)" : "Then choose its size…"}</option>
+            {sizesFor(typeById(pickType)).map((sz) => <option key={sz.id} value={sz.id}>{sizeText(sz)}</option>)}
+          </select>
+          <button type="button" onClick={addPicked} disabled={!pickType} className="btn-primary justify-center py-2 disabled:opacity-40">
+            <Plus size={15} /> Add
+          </button>
+          <button type="button" onClick={() => add({})} className="rounded-xl border border-dashed border-navy-900/20 px-3 py-2 text-sm font-semibold text-navy-800/60 hover:border-teal-500 hover:text-teal-700">
+            Custom
+          </button>
+        </div>
+        <p className="text-xs text-navy-800/45">
+          Floor plans and sizes come from{" "}
+          <a href="/admin/floor-plans" target="_blank" rel="noopener noreferrer" className="font-semibold text-teal-600 hover:underline">Floor Plans &amp; Sizes</a>
+          {planTypes.length ? "" : " (none set up yet)"}. Picking one fills the rooms and areas; you can still adjust them below.
+        </p>
+
+        {floorPlans.length === 0 ? (
+          <div className="rounded-xl border-2 border-dashed border-navy-900/10 px-4 py-10 text-center text-sm text-navy-800/45">
+            <LayoutPanelTop size={22} className="mx-auto mb-2 text-navy-800/25" />
+            No floor plans yet. Choose a floor plan and size above.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {floorPlans.map((p, i) => {
+              const key = `plan-${i}`;
+              return (
+                <div key={i} className="rounded-xl border border-navy-900/10 bg-sand-50/60 p-4">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-navy-900 text-xs font-semibold text-white">{i + 1}</span>
+                    <input value={p.label} onChange={(e) => change(i, "label", e.target.value)} placeholder="e.g. 2 BHK, 3 BHK + Study" maxLength={60}
+                      className={`${ic} font-semibold`} />
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button type="button" title="Move up" onClick={() => move(i, -1)} disabled={i === 0} className="flex h-8 w-8 items-center justify-center rounded-lg text-navy-800/50 hover:bg-white disabled:opacity-30"><ArrowUp size={15} /></button>
+                      <button type="button" title="Move down" onClick={() => move(i, 1)} disabled={i === floorPlans.length - 1} className="flex h-8 w-8 items-center justify-center rounded-lg text-navy-800/50 hover:bg-white disabled:opacity-30"><ArrowDown size={15} /></button>
+                      <button type="button" title="Duplicate" onClick={() => duplicate(i)} className="flex h-8 w-8 items-center justify-center rounded-lg text-navy-800/50 hover:bg-white"><Copy size={14} /></button>
+                      <button type="button" title="Remove" onClick={() => remove(i)} className="flex h-8 w-8 items-center justify-center rounded-lg text-coral-600 hover:bg-coral-500/10"><Trash2 size={15} /></button>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <select value={p.floor_plan_type_id} onChange={(e) => setFloorPlans((list) => list.map((x, idx) => (idx === i ? { ...x, ...fromMaster(e.target.value, sizesFor(typeById(e.target.value))[0]?.id) } : x)))}
+                      className={ic} aria-label="Floor plan from list">
+                      <option value="">Custom (not from list)</option>
+                      {planTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                    <select value={p.floor_plan_size_id} disabled={!p.floor_plan_type_id}
+                      onChange={(e) => setFloorPlans((list) => list.map((x, idx) => (idx === i ? { ...x, ...fromMaster(x.floor_plan_type_id, e.target.value) } : x)))}
+                      className={`${ic} disabled:bg-sand-50 disabled:text-navy-800/40`} aria-label="Size from list">
+                      <option value="">No standard size</option>
+                      {sizesFor(typeById(p.floor_plan_type_id)).map((sz) => <option key={sz.id} value={sz.id}>{sizeText(sz)}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="mt-3 grid gap-4 md:grid-cols-[1fr,220px]">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      <Field label="Bedrooms"><input type="number" min="0" value={p.bedrooms} onChange={(e) => change(i, "bedrooms", e.target.value)} className={ic} /></Field>
+                      <Field label="Bathrooms"><input type="number" min="0" value={p.bathrooms} onChange={(e) => change(i, "bathrooms", e.target.value)} className={ic} /></Field>
+                      <Field label="Balconies"><input type="number" min="0" value={p.balconies} onChange={(e) => change(i, "balconies", e.target.value)} className={ic} /></Field>
+                      <Field label="Carpet area (m²)"><input type="number" min="0" step="0.01" value={p.carpet_area_sqm} onChange={(e) => change(i, "carpet_area_sqm", e.target.value)} className={ic} /></Field>
+                      <Field label="Built-up area (m²)"><input type="number" min="0" step="0.01" value={p.built_up_area_sqm} onChange={(e) => change(i, "built_up_area_sqm", e.target.value)} className={ic} /></Field>
+                      <Field label="Super built-up (m²)"><input type="number" min="0" step="0.01" value={p.super_area_sqm} onChange={(e) => change(i, "super_area_sqm", e.target.value)} className={ic} /></Field>
+                      <Field label="Price" hint="Leave blank for 'Price on request'"><input type="number" min="0" value={p.price} onChange={(e) => change(i, "price", e.target.value)} className={ic} /></Field>
+                    </div>
+                    <Field label="Floor plan drawing (naksha)">
+                      {p.image_url ? (
+                        <div className="relative overflow-hidden rounded-xl border border-navy-900/10 bg-white">
+                          {isPdf(p.image_url) ? (
+                            <a href={p.image_url} target="_blank" rel="noopener noreferrer" className="flex h-36 flex-col items-center justify-center gap-1 text-sm font-semibold text-teal-600">
+                              <FileText size={26} /> PDF plan
+                            </a>
+                          ) : (
+                            <img src={p.image_url} alt={`${p.label} floor plan`} className="h-36 w-full object-contain p-1" />
+                          )}
+                          <button type="button" onClick={async () => { if (await ask({ title: `Remove the ${p.label || ""} plan drawing?`, message: "It will be removed from this floor plan when you save.", confirmLabel: "Remove" })) change(i, "image_url", ""); }}
+                            className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white hover:bg-red-500"><X size={12} /></button>
+                        </div>
+                      ) : (
+                        <label className="flex h-36 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-navy-900/15 bg-white text-navy-800/40 transition-colors hover:border-teal-500/40 hover:text-teal-600">
+                          {uploadingKey === key ? <Loader2 size={20} className="animate-spin text-teal-500" /> : <Upload size={20} />}
+                          <span className="text-xs font-medium">{uploadingKey === key ? "Uploading..." : "Upload plan"}</span>
+                          <span className="text-[11px]">Image or PDF</span>
+                          <input type="file" accept="image/*,.pdf" disabled={!!uploadingKey} className="hidden"
+                            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(key, f, (url) => change(i, "image_url", url)); e.target.value = ""; }} />
+                        </label>
+                      )}
+                    </Field>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Section>
+
+      <Section title="Plot / site plan (naksha)">
+        <p className="-mt-1 text-xs text-navy-800/50">The layout of the whole plot or project: boundaries, roads, open areas. Shown alongside the floor plans.</p>
+        <FileUploadRow value={form.site_plan_url} uploading={uploadingKey === "site_plan"} accept="image/*,.pdf"
+          placeholder="Upload plot / site plan (image or PDF)"
+          onFile={(file) => handleUpload("site_plan", file, (url) => upd("site_plan_url", url))}
+          onRemove={async () => { if (await ask({ title: "Remove the plot / site plan?", message: "It will be removed from this property when you save.", confirmLabel: "Remove" })) upd("site_plan_url", ""); }} />
+        {form.site_plan_url && !isPdf(form.site_plan_url) && (
+          <img src={form.site_plan_url} alt="Plot plan" className="max-h-56 w-full rounded-xl border border-navy-900/10 bg-white object-contain p-1" />
+        )}
+      </Section>
+
+      <Section title="General floor plan (optional)">
+        <p className="-mt-1 text-xs text-navy-800/50">A single overall plan. Shown only if no configurations are added above.</p>
+        <FileUploadRow value={form.floor_plan_url} uploading={uploadingKey === "floor_plan"} accept="image/*,.pdf"
+          placeholder="Upload floor plan (image or PDF)"
+          onFile={(file) => handleUpload("floor_plan", file, (url) => upd("floor_plan_url", url))}
+          onRemove={async () => { if (await ask({ title: "Remove the general floor plan?", message: "It will be removed from this property when you save.", confirmLabel: "Remove" })) upd("floor_plan_url", ""); }} />
+      </Section>
+      {dialog}
+    </>
+  );
+}
+
+// ── Step 8: Legal & Owner ────────────────────────────────────────────────────
 function StepLegal({ form, upd, ic }) {
   return (
     <Section title="Ownership & Legal">
@@ -702,7 +1010,7 @@ function StepLegal({ form, upd, ic }) {
   );
 }
 
-// ── Step 8: Intelligence (trust badges + identifiers + financials) ──────────
+// ── Step 9: Intelligence (trust badges + identifiers + financials) ──────────
 function StepIntelligence({ form, upd, ic }) {
   return (
     <>
@@ -810,8 +1118,8 @@ function StepIntelligence({ form, upd, ic }) {
   );
 }
 
-// ── Step 8: Review ───────────────────────────────────────────────────────────
-function StepReview({ form, features, images, selectedCity, selectedAgent, selectedCategory, selectedSub }) {
+// ── Step 10: Review ──────────────────────────────────────────────────────────
+function StepReview({ form, features, images, floorPlans, selectedCity, selectedAgent, selectedCategory, selectedSub }) {
   const rows = [
     ["Listing type", form.listing_type],
     ["Property type", form.property_type],
@@ -841,7 +1149,8 @@ function StepReview({ form, features, images, selectedCity, selectedAgent, selec
     ["Gallery photos", `${images.filter((i) => i.url).length}`],
     ["Video", form.video_url ? "Yes" : "No"],
     ["Virtual tour", form.virtual_tour_url ? "Yes" : "No"],
-    ["Floor plan", form.floor_plan_url ? "Yes" : "No"],
+    ["Floor plans", floorPlans.filter((p) => p.label.trim()).map((p) => p.label).join(", ") || (form.floor_plan_url ? "1 (general)" : "None")],
+    ["Plot / site plan", form.site_plan_url ? "Yes" : "No"],
     ["Brochure", form.brochure_url ? "Yes" : "No"],
   ];
   return (

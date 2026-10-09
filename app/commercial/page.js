@@ -1,8 +1,11 @@
+import { notFound } from "next/navigation";
 import PropertyListingPage from "@/components/PropertyListingPage";
+import { isCommercialEnabled } from "@/lib/queries";
 
-export const metadata = { title: "Commercial Properties — Flex Home" };
+export const metadata = { title: "Commercial Properties" };
 
-export default function Page({ searchParams }) {
+export default async function Page({ searchParams }) {
+  if (!(await isCommercialEnabled())) notFound();
   return (
     <PropertyListingPage
       searchParams={searchParams}

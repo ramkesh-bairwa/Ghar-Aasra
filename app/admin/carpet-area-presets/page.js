@@ -1,13 +1,10 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import AdminGate from "@/components/admin/AdminGate";
-import ResourceManager from "@/components/admin/ResourceManager";
-import { resources } from "@/lib/adminResources";
+// Carpet area presets were merged into Floor Plans & Sizes, the one list the
+// property form and property pages use. Old links and bookmarks land there.
+// Rendered per request so it issues a real redirect rather than a static page.
+export const dynamic = "force-dynamic";
 
 export default function Page() {
-  return (
-    <AdminGate>
-      <ResourceManager resource="carpet_area_presets" config={resources.carpet_area_presets} />
-    </AdminGate>
-  );
+  redirect("/admin/floor-plans");
 }

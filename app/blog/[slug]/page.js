@@ -6,7 +6,7 @@ import { Calendar, User } from "lucide-react";
 
 export async function generateMetadata({ params }) {
   const post = await getBlogPostBySlug(params.slug);
-  return { title: post ? `${post.title} — Flex Home` : "Blog — Flex Home" };
+  return { title: post ? `${post.title}` : "Blog" };
 }
 
 export default async function BlogPostPage({ params }) {

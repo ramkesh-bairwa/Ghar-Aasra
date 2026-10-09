@@ -4,7 +4,7 @@ import PageHeader from "@/components/PageHeader";
 import FaqAccordion from "@/components/FaqAccordion";
 import { listFaqs } from "@/lib/queries";
 
-export const metadata = { title: "FAQ — Flex Home" };
+export const metadata = { title: "FAQ" };
 
 export default async function FaqPage() {
   const faqs = await listFaqs();

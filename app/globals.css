@@ -95,3 +95,68 @@ body {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* Property brochure printing (PrintBrochureButton): drop site chrome and
+   anything pinned to the viewport so only the listing content prints. */
+@media print {
+  header,
+  footer,
+  .fixed {
+    display: none !important;
+  }
+  .card-surface {
+    box-shadow: none;
+    break-inside: avoid;
+  }
+}
+
+/* Skeleton placeholders shown by route loading.js files while a page loads. */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: color-mix(in srgb, var(--color-navy-900) 7%, transparent);
+  border-radius: 0.75rem;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* NotificationBell: a short wiggle when there's something unread. */
+@keyframes bell-ring {
+  0%, 100% { transform: rotate(0); }
+  15% { transform: rotate(14deg); }
+  30% { transform: rotate(-12deg); }
+  45% { transform: rotate(8deg); }
+  60% { transform: rotate(-6deg); }
+  75% { transform: rotate(3deg); }
+}
+
+/* BookingCelebration: confetti burst, streamers and the badge pop on the
+   booking success screen. Reduced-motion users get the settled end state. */
+@keyframes confetti-fall {
+  0% { transform: translate3d(0, -20px, 0) rotate(0deg); opacity: 1; }
+  80% { opacity: 1; }
+  100% { transform: translate3d(var(--drift, 0px), 560px, 0) rotate(var(--spin, 540deg)); opacity: 0; }
+}
+@keyframes celebrate-pop {
+  0% { transform: scale(0.3); opacity: 0; }
+  60% { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); }
+}
+@keyframes ribbon-draw {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes ribbon-unfurl {
+  0% { transform: scaleX(0.2); opacity: 0; }
+  100% { transform: scaleX(1); opacity: 1; }
+}

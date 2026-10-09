@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireUser } from "@/lib/userGuard";
-
-const LISTING_TYPES = new Set(["sale", "rent", "commercial"]);
-const PROPERTY_TYPES = new Set(["apartment", "villa", "house", "land", "commercial", "office"]);
+import { validateListing, saveGalleryAndFeatures } from "@/lib/vendorListings";
+import { saveFloorPlans } from "@/lib/propertyFloorPlans";
+import { checkApprovedSeller } from "@/lib/sellers";
 
 function slugify(title) {
   return title
@@ -29,54 +29,25 @@ export async function POST(request) {
   const user = requireUser();
   if (!user) return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
 
-  const body = await request.json();
-  const {
-    title, description, listingType, propertyType, price, pricePeriod,
-    bedrooms, bathrooms, areaSqm, address, locationId,
-    coverImageUrl, gallery, features,
-  } = body;
+  // Only approved sellers can list (self-registered sellers wait for admin approval).
+  const seller = await checkApprovedSeller(user.id);
+  if (!seller.account) return NextResponse.json({ error: seller.message, sellerStatus: seller.status }, { status: 403 });
 
-  if (!title || !title.trim()) return NextResponse.json({ error: "Title is required." }, { status: 400 });
-  if (!LISTING_TYPES.has(listingType)) return NextResponse.json({ error: "Choose a valid listing type." }, { status: 400 });
-  if (!PROPERTY_TYPES.has(propertyType)) return NextResponse.json({ error: "Choose a valid property type." }, { status: 400 });
-  if (!price || Number(price) <= 0) return NextResponse.json({ error: "Enter a valid price." }, { status: 400 });
-  if (!coverImageUrl) return NextResponse.json({ error: "Add at least a cover photo." }, { status: 400 });
+  const body = await request.json();
+  const listing = await validateListing(body);
+  if (listing.error) return NextResponse.json({ error: listing.error, fieldErrors: listing.fieldErrors }, { status: 400 });
 
   try {
-    const slug = await uniqueSlug(slugify(title));
+    const slug = await uniqueSlug(slugify(listing.row.title));
+    const row = { ...listing.row, slug, status: listing.status, featured: 0, owner_user_id: user.id };
+    const cols = Object.keys(row);
     const result = await query(
-      `INSERT INTO properties
-        (title, slug, description, listing_type, property_type, price, price_period,
-         bedrooms, bathrooms, area_sqm, address, location_id, cover_image_url, status, featured)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', 0)`,
-      [
-        title.trim(), slug, description || null, listingType, propertyType, Number(price),
-        pricePeriod === "monthly" || pricePeriod === "yearly" ? pricePeriod : "one_time",
-        Number(bedrooms) || 0, Number(bathrooms) || 0, areaSqm ? Number(areaSqm) : null,
-        address || null, locationId ? Number(locationId) : null, coverImageUrl,
-      ]
+      `INSERT INTO properties (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`,
+      cols.map((c) => row[c])
     );
-    const propertyId = result.insertId;
-
-    const galleryUrls = Array.isArray(gallery) ? gallery.filter(Boolean) : [];
-    if (galleryUrls.length) {
-      const values = galleryUrls.map((url, i) => [propertyId, url, i]);
-      await query(
-        `INSERT INTO property_images (property_id, image_url, sort_order) VALUES ${values.map(() => "(?, ?, ?)").join(", ")}`,
-        values.flat()
-      );
-    }
-
-    const featureList = Array.isArray(features) ? features.filter(Boolean) : [];
-    if (featureList.length) {
-      const values = featureList.map((f) => [propertyId, f]);
-      await query(
-        `INSERT INTO property_features (property_id, feature) VALUES ${values.map(() => "(?, ?)").join(", ")}`,
-        values.flat()
-      );
-    }
-
-    return NextResponse.json({ ok: true, slug });
+    await saveGalleryAndFeatures(result.insertId, listing.gallery, listing.features);
+    if (Array.isArray(body.floorPlans)) await saveFloorPlans(result.insertId, body.floorPlans);
+    return NextResponse.json({ ok: true, slug, id: result.insertId, status: listing.status });
   } catch (err) {
     return NextResponse.json({ error: "Could not publish your listing.", detail: err.message }, { status: 503 });
   }

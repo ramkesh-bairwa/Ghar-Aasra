@@ -18,6 +18,11 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
+-- `users` may already exist from an earlier run (CREATE TABLE IF NOT EXISTS is
+-- then a no-op), so add columns introduced since then explicitly.
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'admin_role');
+SET @s = IF(@col_exists=0,"ALTER TABLE users ADD COLUMN admin_role ENUM('super_admin','hr','seller','sales','marketing') NULL DEFAULT NULL","SELECT 1"); PREPARE s FROM @s; EXECUTE s; DEALLOCATE PREPARE s;
+
 -- ---------- Agents / brokers (extends users where role = 'agent') ----------
 CREATE TABLE IF NOT EXISTS agents (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -226,6 +231,11 @@ SET @s = IF(@col_exists=0,'ALTER TABLE properties ADD COLUMN price_per_sqft DECI
 
 SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'properties' AND COLUMN_NAME = 'brokerage');
 SET @s = IF(@col_exists=0,'ALTER TABLE properties ADD COLUMN brokerage DECIMAL(10,2)','SELECT 1'); PREPARE s FROM @s; EXECUTE s; DEALLOCATE PREPARE s;
+-- How `brokerage` is meant: 'none' (no brokerage — a selling point on rentals),
+-- 'fixed' (brokerage is an amount) or 'months' (brokerage is a number of
+-- months' rent). NULL on older rows reads as 'fixed'.
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'properties' AND COLUMN_NAME = 'brokerage_type');
+SET @s = IF(@col_exists=0,"ALTER TABLE properties ADD COLUMN brokerage_type ENUM('none','fixed','months') NULL AFTER brokerage","SELECT 1"); PREPARE s FROM @s; EXECUTE s; DEALLOCATE PREPARE s;
 
 SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'properties' AND COLUMN_NAME = 'registration_charges');
 SET @s = IF(@col_exists=0,'ALTER TABLE properties ADD COLUMN registration_charges DECIMAL(10,2)','SELECT 1'); PREPARE s FROM @s; EXECUTE s; DEALLOCATE PREPARE s;
@@ -346,6 +356,11 @@ PREPARE add_subcat_fk FROM @add_subcat_fk;
 EXECUTE add_subcat_fk;
 DEALLOCATE PREPARE add_subcat_fk;
 
+-- Who listed the property from the public "Add Property" flow (the vendor
+-- panel at /vendor shows a user only their own rows). NULL for admin-created listings.
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'properties' AND COLUMN_NAME = 'owner_user_id');
+SET @s = IF(@col_exists=0,'ALTER TABLE properties ADD COLUMN owner_user_id INT NULL, ADD INDEX idx_properties_owner (owner_user_id)','SELECT 1'); PREPARE s FROM @s; EXECUTE s; DEALLOCATE PREPARE s;
+
 CREATE TABLE IF NOT EXISTS property_images (
   id INT AUTO_INCREMENT PRIMARY KEY,
   property_id INT NOT NULL,
@@ -353,6 +368,58 @@ CREATE TABLE IF NOT EXISTS property_images (
   sort_order INT DEFAULT 0,
   FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
 );
+
+-- One row per unit configuration of a property (1 BHK, 2 BHK, 3 BHK…), each
+-- with its own areas, price and floor plan drawing ("naksha"). Managed from
+-- the admin property form; shown in the detail page's Floor plans section.
+CREATE TABLE IF NOT EXISTS property_floor_plans (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  property_id INT NOT NULL,
+  label VARCHAR(60) NOT NULL,
+  bedrooms INT NULL,
+  bathrooms INT NULL,
+  balconies INT NULL,
+  carpet_area_sqm DECIMAL(10,2) NULL,
+  built_up_area_sqm DECIMAL(10,2) NULL,
+  super_area_sqm DECIMAL(10,2) NULL,
+  price DECIMAL(14,2) NULL,
+  image_url VARCHAR(500) NULL,
+  sort_order INT DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE,
+  INDEX idx_floor_plans_property (property_id, sort_order)
+);
+
+-- Floor plan master list, managed under Admin → Floor Plans: the unit types
+-- on offer (1 BHK, 2 BHK…) and, under each, its standard sizes. The property
+-- form picks from these, copying the areas into property_floor_plans.
+CREATE TABLE IF NOT EXISTS floor_plan_types (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(60) NOT NULL UNIQUE,
+  bedrooms INT NULL,
+  bathrooms INT NULL,
+  balconies INT NULL,
+  sort_order INT DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS floor_plan_sizes (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  floor_plan_type_id INT NOT NULL,
+  label VARCHAR(60) NULL,
+  carpet_area_sqm DECIMAL(10,2) NOT NULL,
+  built_up_area_sqm DECIMAL(10,2) NULL,
+  super_area_sqm DECIMAL(10,2) NULL,
+  sort_order INT DEFAULT 0,
+  FOREIGN KEY (floor_plan_type_id) REFERENCES floor_plan_types(id) ON DELETE CASCADE,
+  INDEX idx_floor_plan_sizes_type (floor_plan_type_id, sort_order)
+);
+
+-- Which master type/size a property's floor plan was picked from (NULL for
+-- custom ones). Its areas are copied, so later master edits don't change it.
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'property_floor_plans' AND COLUMN_NAME = 'floor_plan_type_id');
+SET @s = IF(@col_exists=0,"ALTER TABLE property_floor_plans ADD COLUMN floor_plan_type_id INT NULL AFTER property_id, ADD COLUMN floor_plan_size_id INT NULL AFTER floor_plan_type_id","SELECT 1"); PREPARE s FROM @s; EXECUTE s; DEALLOCATE PREPARE s;
+
 
 CREATE TABLE IF NOT EXISTS property_features (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -375,6 +442,10 @@ CREATE TABLE IF NOT EXISTS amenities (
 -- `amenities` may already exist from an earlier run without `category`.
 SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'amenities' AND COLUMN_NAME = 'category');
 SET @s = IF(@col_exists=0,"ALTER TABLE amenities ADD COLUMN category VARCHAR(60) DEFAULT 'other'",'SELECT 1'); PREPARE s FROM @s; EXECUTE s; DEALLOCATE PREPARE s;
+
+-- Which amenities appear in the public "Any amenity" search filter.
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'amenities' AND COLUMN_NAME = 'show_in_filters');
+SET @s = IF(@col_exists=0,'ALTER TABLE amenities ADD COLUMN show_in_filters TINYINT(1) NOT NULL DEFAULT 0','SELECT 1'); PREPARE s FROM @s; EXECUTE s; DEALLOCATE PREPARE s;
 
 -- ---------- Carpet area presets — pick "2 BHK" on a property and its usual
 -- carpet/built-up area and bedroom count fill in automatically. ----------
@@ -415,10 +486,18 @@ CREATE TABLE IF NOT EXISTS projects (
   handover_date DATE,
   starting_price DECIMAL(14,2),
   total_units INT,
+  amenities TEXT,          -- one amenity per line
+  gallery TEXT,            -- one image URL per line
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (developer_id) REFERENCES developers(id) ON DELETE SET NULL,
   FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE SET NULL
 );
+
+-- `projects` may already exist without amenities/gallery.
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'projects' AND COLUMN_NAME = 'amenities');
+SET @s = IF(@col_exists=0,'ALTER TABLE projects ADD COLUMN amenities TEXT','SELECT 1'); PREPARE s FROM @s; EXECUTE s; DEALLOCATE PREPARE s;
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'projects' AND COLUMN_NAME = 'gallery');
+SET @s = IF(@col_exists=0,'ALTER TABLE projects ADD COLUMN gallery TEXT','SELECT 1'); PREPARE s FROM @s; EXECUTE s; DEALLOCATE PREPARE s;
 
 SET @project_fk_exists = (
   SELECT COUNT(*)
@@ -442,15 +521,21 @@ CREATE TABLE IF NOT EXISTS inquiries (
   project_id INT NULL,
   agent_id INT NULL,
   name VARCHAR(120) NOT NULL,
-  email VARCHAR(160) NOT NULL,
+  email VARCHAR(160) NULL,
   phone VARCHAR(30),
   message TEXT,
+  source VARCHAR(40) NOT NULL DEFAULT 'enquiry', -- 'enquiry' (contact form) | 'callback' (call-me-back widget)
   status ENUM('new', 'contacted', 'closed') NOT NULL DEFAULT 'new',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE SET NULL,
   FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
   FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE SET NULL
 );
+
+-- Callback requests only collect a phone number, so email became optional.
+ALTER TABLE inquiries MODIFY email VARCHAR(160) NULL;
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'inquiries' AND COLUMN_NAME = 'source');
+SET @s = IF(@col_exists=0,"ALTER TABLE inquiries ADD COLUMN source VARCHAR(40) NOT NULL DEFAULT 'enquiry' AFTER message","SELECT 1"); PREPARE s FROM @s; EXECUTE s; DEALLOCATE PREPARE s;
 
 -- ---------- Schedule-a-visit leads (public form, no login required — distinct
 -- from `bookings`, which is a logged-in buyer's confirmed visit on a specific
@@ -486,15 +571,63 @@ CREATE TABLE IF NOT EXISTS favorites (
 -- ---------- Property viewing bookings ----------
 CREATE TABLE IF NOT EXISTS bookings (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  user_id INT NOT NULL,
+  user_id INT NULL, -- NULL for guest bookings (no account) — see guest_* columns
+  guest_name VARCHAR(120) NULL,
+  guest_phone VARCHAR(30) NULL,
+  guest_email VARCHAR(160) NULL,
   property_id INT NOT NULL,
   scheduled_at DATETIME NOT NULL,
+  visit_type ENUM('in_person', 'video') NOT NULL DEFAULT 'in_person',
+  pickup_required TINYINT(1) NOT NULL DEFAULT 0,
+  pickup_address VARCHAR(255) NULL,
   notes VARCHAR(500),
-  status ENUM('pending', 'confirmed', 'completed', 'cancelled') NOT NULL DEFAULT 'pending',
+  admin_notes VARCHAR(500) NULL,
+  status ENUM('pending', 'confirmed', 'completed', 'cancelled', 'no_show') NOT NULL DEFAULT 'pending',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
 );
+
+-- Columns added for guest booking / visit options on databases created
+-- before them (CREATE TABLE IF NOT EXISTS above is then a no-op).
+ALTER TABLE bookings MODIFY user_id INT NULL;
+ALTER TABLE bookings MODIFY status ENUM('pending', 'confirmed', 'completed', 'cancelled', 'no_show') NOT NULL DEFAULT 'pending';
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'bookings' AND COLUMN_NAME = 'guest_name');
+SET @s = IF(@col_exists=0,"ALTER TABLE bookings ADD COLUMN guest_name VARCHAR(120) NULL AFTER user_id","SELECT 1"); PREPARE s FROM @s; EXECUTE s; DEALLOCATE PREPARE s;
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'bookings' AND COLUMN_NAME = 'guest_phone');
+SET @s = IF(@col_exists=0,"ALTER TABLE bookings ADD COLUMN guest_phone VARCHAR(30) NULL AFTER guest_name","SELECT 1"); PREPARE s FROM @s; EXECUTE s; DEALLOCATE PREPARE s;
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'bookings' AND COLUMN_NAME = 'guest_email');
+SET @s = IF(@col_exists=0,"ALTER TABLE bookings ADD COLUMN guest_email VARCHAR(160) NULL AFTER guest_phone","SELECT 1"); PREPARE s FROM @s; EXECUTE s; DEALLOCATE PREPARE s;
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'bookings' AND COLUMN_NAME = 'visit_type');
+SET @s = IF(@col_exists=0,"ALTER TABLE bookings ADD COLUMN visit_type ENUM('in_person','video') NOT NULL DEFAULT 'in_person' AFTER scheduled_at","SELECT 1"); PREPARE s FROM @s; EXECUTE s; DEALLOCATE PREPARE s;
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'bookings' AND COLUMN_NAME = 'pickup_required');
+SET @s = IF(@col_exists=0,"ALTER TABLE bookings ADD COLUMN pickup_required TINYINT(1) NOT NULL DEFAULT 0 AFTER visit_type","SELECT 1"); PREPARE s FROM @s; EXECUTE s; DEALLOCATE PREPARE s;
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'bookings' AND COLUMN_NAME = 'pickup_address');
+SET @s = IF(@col_exists=0,"ALTER TABLE bookings ADD COLUMN pickup_address VARCHAR(255) NULL AFTER pickup_required","SELECT 1"); PREPARE s FROM @s; EXECUTE s; DEALLOCATE PREPARE s;
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'bookings' AND COLUMN_NAME = 'admin_notes');
+SET @s = IF(@col_exists=0,"ALTER TABLE bookings ADD COLUMN admin_notes VARCHAR(500) NULL AFTER notes","SELECT 1"); PREPARE s FROM @s; EXECUTE s; DEALLOCATE PREPARE s;
+
+-- Visits reach the listing's seller only after an admin approves them.
+-- approved_at is set when staff confirm a booking / schedule a visit
+-- request, and cleared if it goes back to awaiting review (e.g. the buyer
+-- reschedules). /api/vendor/overview only returns rows where it is set.
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'bookings' AND COLUMN_NAME = 'approved_at');
+SET @s = IF(@col_exists=0,"ALTER TABLE bookings ADD COLUMN approved_at DATETIME NULL AFTER status","SELECT 1"); PREPARE s FROM @s; EXECUTE s; DEALLOCATE PREPARE s;
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'visit_requests' AND COLUMN_NAME = 'approved_at');
+SET @s = IF(@col_exists=0,"ALTER TABLE visit_requests ADD COLUMN approved_at DATETIME NULL AFTER status","SELECT 1"); PREPARE s FROM @s; EXECUTE s; DEALLOCATE PREPARE s;
+-- Visits staff had already confirmed before this column existed count as approved.
+UPDATE bookings SET approved_at = created_at WHERE approved_at IS NULL AND status IN ('confirmed', 'completed', 'no_show');
+UPDATE visit_requests SET approved_at = created_at WHERE approved_at IS NULL AND status = 'scheduled';
+
+-- Short, human-friendly reference shown to the buyer and searchable by admin
+-- and seller (e.g. BK-7KQ3M9 for bookings, VR-4HT8XZ for schedule requests).
+-- Generated in lib/bookingCode.js; rows from before this column get one here.
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'bookings' AND COLUMN_NAME = 'booking_code');
+SET @s = IF(@col_exists=0,"ALTER TABLE bookings ADD COLUMN booking_code VARCHAR(16) NULL AFTER id, ADD UNIQUE KEY uniq_bookings_code (booking_code)","SELECT 1"); PREPARE s FROM @s; EXECUTE s; DEALLOCATE PREPARE s;
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'visit_requests' AND COLUMN_NAME = 'booking_code');
+SET @s = IF(@col_exists=0,"ALTER TABLE visit_requests ADD COLUMN booking_code VARCHAR(16) NULL AFTER id, ADD UNIQUE KEY uniq_visit_requests_code (booking_code)","SELECT 1"); PREPARE s FROM @s; EXECUTE s; DEALLOCATE PREPARE s;
+UPDATE bookings SET booking_code = CONCAT('BK-', UPPER(SUBSTRING(MD5(CONCAT('b', id, created_at)), 1, 6))) WHERE booking_code IS NULL;
+UPDATE visit_requests SET booking_code = CONCAT('VR-', UPPER(SUBSTRING(MD5(CONCAT('v', id, created_at)), 1, 6))) WHERE booking_code IS NULL;
 
 -- ---------- Blog / news ----------
 CREATE TABLE IF NOT EXISTS blog_posts (
@@ -527,6 +660,34 @@ CREATE TABLE IF NOT EXISTS pages (
   title VARCHAR(200) NOT NULL,
   content MEDIUMTEXT,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- ---------- Homepage content ----------
+CREATE TABLE IF NOT EXISTS testimonials (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(120) NOT NULL,
+  role VARCHAR(160),
+  quote TEXT NOT NULL,
+  rating TINYINT NOT NULL DEFAULT 5,
+  sort_order INT DEFAULT 0
+);
+
+-- Headline numbers on the homepage stats bar and About page ("12,400+ Properties listed").
+CREATE TABLE IF NOT EXISTS site_stats (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  label VARCHAR(120) NOT NULL,
+  value VARCHAR(40) NOT NULL,
+  sort_order INT DEFAULT 0
+);
+
+-- "Browse by property type" tiles; each links to /properties?propertyType=<property_type>
+-- and shows a live count of properties of that type.
+CREATE TABLE IF NOT EXISTS home_categories (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(120) NOT NULL,
+  property_type VARCHAR(40) NOT NULL UNIQUE,
+  icon VARCHAR(40) NOT NULL DEFAULT 'home',
+  sort_order INT DEFAULT 0
 );
 
 -- ---------- Site settings (key/value store, e.g. the homepage hero video) ----------
@@ -620,3 +781,44 @@ INSERT IGNORE INTO pages (slug, title, content) VALUES
 ('about-us', 'About Flex Home', 'Flex Home started in 2019 to fix inaccurate listings and slow agents. Edit this page from the admin panel.'),
 ('privacy-policy', 'Privacy Policy', 'Add your privacy policy content here from the admin panel.'),
 ('terms', 'Terms & Conditions', 'Add your terms and conditions content here from the admin panel.');
+
+-- Floor plan master starter list on a fresh install: Studio–5 BHK, with sizes
+-- taken from the residential carpet-area presets seeded above (labelled by
+-- property type). Runs last so those presets exist.
+INSERT INTO floor_plan_types (name, bedrooms, bathrooms, sort_order)
+SELECT * FROM (
+  SELECT 'Studio' AS name, 0 AS bedrooms, 1 AS bathrooms, 0 AS sort_order UNION ALL SELECT '1 BHK', 1, 1, 1 UNION ALL SELECT '2 BHK', 2, 2, 2 UNION ALL
+  SELECT '3 BHK', 3, 2, 3 UNION ALL SELECT '4 BHK', 4, 3, 4 UNION ALL SELECT '5 BHK', 5, 4, 5
+) starter
+WHERE NOT EXISTS (SELECT 1 FROM floor_plan_types);
+INSERT INTO floor_plan_sizes (floor_plan_type_id, label, carpet_area_sqm, built_up_area_sqm, sort_order)
+SELECT t.id, s.name, p.carpet_area_sqm, p.built_up_area_sqm, p.sort_order
+FROM carpet_area_presets p
+JOIN subcategories s ON s.id = p.subcategory_id
+JOIN categories c ON c.id = s.category_id AND c.slug = 'residential'
+JOIN floor_plan_types t ON (p.bedrooms > 0 AND t.bedrooms = p.bedrooms) OR (p.label = 'Studio' AND t.name = 'Studio')
+WHERE NOT EXISTS (SELECT 1 FROM floor_plan_sizes);
+
+-- Floor Plans & Sizes is the single source for unit sizes (the old Carpet
+-- Area Presets page now points there). Bring across every preset the starter
+-- copy above skipped — offices, retail units, plots, or anything added since —
+-- as a type named after its subcategory. Safe to re-run: types match by name,
+-- sizes by type + carpet area.
+INSERT INTO floor_plan_types (name, bedrooms, bathrooms, sort_order)
+SELECT DISTINCT LEFT(s.name, 60), 0, NULL, 10 + s.id
+FROM carpet_area_presets p
+JOIN subcategories s ON s.id = p.subcategory_id
+WHERE COALESCE(p.bedrooms, 0) = 0 AND p.label <> 'Studio'
+  AND NOT EXISTS (SELECT 1 FROM floor_plan_types t WHERE t.name = LEFT(s.name, 60));
+INSERT INTO floor_plan_sizes (floor_plan_type_id, label, carpet_area_sqm, built_up_area_sqm, sort_order)
+SELECT t.id, CASE WHEN COALESCE(p.bedrooms, 0) = 0 AND p.label <> 'Studio' THEN p.label ELSE s.name END,
+       p.carpet_area_sqm, p.built_up_area_sqm, p.sort_order
+FROM carpet_area_presets p
+JOIN subcategories s ON s.id = p.subcategory_id
+JOIN floor_plan_types t ON
+     (p.bedrooms > 0 AND t.name = CONCAT(p.bedrooms, ' BHK'))
+  OR (p.label = 'Studio' AND t.name = 'Studio')
+  OR (COALESCE(p.bedrooms, 0) = 0 AND p.label <> 'Studio' AND t.name = LEFT(s.name, 60))
+WHERE NOT EXISTS (
+  SELECT 1 FROM floor_plan_sizes x WHERE x.floor_plan_type_id = t.id AND x.carpet_area_sqm = p.carpet_area_sqm
+);

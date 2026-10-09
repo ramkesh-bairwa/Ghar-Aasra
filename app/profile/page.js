@@ -4,7 +4,7 @@ import PageHeader from "@/components/PageHeader";
 import ProfileView from "@/components/ProfileView";
 import RequireAuth from "@/components/RequireAuth";
 
-export const metadata = { title: "My Profile — Flex Home" };
+export const metadata = { title: "My Profile" };
 
 export default function ProfilePage() {
   return (

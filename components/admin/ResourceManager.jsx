@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, X, AlertCircle, Inbox, Eye, Search } from "lucide-react";
 import Pagination from "./Pagination";
+import { TableSkeletonRows } from "./AdminSkeleton";
+import { useDialog } from "@/components/ConfirmDialog";
 
 function singularize(label) {
   if (/ies$/.test(label)) return label.replace(/ies$/, "y");
@@ -10,6 +12,7 @@ function singularize(label) {
 }
 
 export default function ResourceManager({ resource, config }) {
+  const { alert: notify, dialog } = useDialog();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -81,7 +84,7 @@ export default function ResourceManager({ resource, config }) {
       setEditing(null);
       load();
     } else {
-      alert(data.error || "Save failed.");
+      notify({ title: "Save failed", message: data.error || "Save failed.", tone: "danger" });
     }
   }
 
@@ -89,7 +92,7 @@ export default function ResourceManager({ resource, config }) {
     const res = await fetch(`/api/admin/${resource}/${id}`, { method: "DELETE" });
     setDeleteTarget(null);
     if (res.ok) load();
-    else alert("Delete failed.");
+    else notify({ title: "Delete failed", message: "Delete failed.", tone: "danger" });
   }
 
   return (
@@ -98,6 +101,7 @@ export default function ResourceManager({ resource, config }) {
         <div>
           <h1 className="font-display text-2xl text-navy-900">{config.label}</h1>
           {!loading && <p className="mt-1 text-sm text-navy-800/55">{rows.length} {rows.length === 1 ? "record" : "records"}</p>}
+          {config.description && <p className="mt-1 max-w-2xl text-sm text-navy-800/55">{config.description}</p>}
         </div>
         <button onClick={() => setEditing({})} className="btn-primary">
           <Plus size={16} /> Add {singularize(config.label)}
@@ -167,7 +171,7 @@ export default function ResourceManager({ resource, config }) {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td className="px-4 py-6 text-navy-800/40" colSpan={config.listFields.length + 1}>Loading...</td></tr>
+              <TableSkeletonRows cols={config.listFields.length + 1} />
             ) : rows.length === 0 ? (
               <tr>
                 <td className="px-4 py-12 text-center text-navy-800/40" colSpan={config.listFields.length + 1}>
@@ -244,6 +248,7 @@ export default function ResourceManager({ resource, config }) {
           onConfirm={() => handleDelete(deleteTarget.id)}
         />
       )}
+      {dialog}
     </div>
   );
 }

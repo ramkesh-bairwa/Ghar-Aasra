@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { requireAdmin } from "@/lib/adminGuard";
+import { requireAdminForResource } from "@/lib/adminGuard";
+import { addAutoCharge } from "@/lib/sellers";
+
+// Marking a seller's listing sold/rented adds their per-deal commission.
+const DEAL_STATUSES = ["sold", "rented"];
 
 const ALLOWED = [
   "title","slug","description","listing_type","property_type","category_id","subcategory_id",
@@ -28,7 +32,7 @@ function normalize(col, val) {
 }
 
 export async function GET(request, { params }) {
-  if (!requireAdmin()) return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+  if (!requireAdminForResource("properties")) return NextResponse.json({ error: "Not authenticated or not permitted." }, { status: 403 });
   try {
     const rows = await query("SELECT * FROM properties WHERE id = ? LIMIT 1", [params.id]);
     if (!rows.length) return NextResponse.json({ error: "Not found." }, { status: 404 });
@@ -39,13 +43,14 @@ export async function GET(request, { params }) {
 }
 
 export async function PUT(request, { params }) {
-  if (!requireAdmin()) return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+  if (!requireAdminForResource("properties")) return NextResponse.json({ error: "Not authenticated or not permitted." }, { status: 403 });
   const body = await request.json();
 
   // Special actions
   if (body._action === "publish") {
     const newStatus = body.status;
     await query("UPDATE properties SET status = ? WHERE id = ?", [newStatus, params.id]);
+    if (DEAL_STATUSES.includes(newStatus)) await addAutoCharge({ type: "deal", sourceType: "property", sourceId: Number(params.id), propertyId: Number(params.id) });
     return NextResponse.json({ ok: true });
   }
   if (body._action === "approve") {
@@ -86,6 +91,7 @@ export async function PUT(request, { params }) {
   const values = [...cols.map((c) => normalize(c, body[c])), params.id];
   try {
     await query(`UPDATE properties SET ${cols.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`, values);
+    if (DEAL_STATUSES.includes(body.status)) await addAutoCharge({ type: "deal", sourceType: "property", sourceId: Number(params.id), propertyId: Number(params.id) });
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json({ error: "Update failed.", detail: err.message }, { status: 400 });
@@ -93,7 +99,7 @@ export async function PUT(request, { params }) {
 }
 
 export async function DELETE(request, { params }) {
-  if (!requireAdmin()) return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+  if (!requireAdminForResource("properties")) return NextResponse.json({ error: "Not authenticated or not permitted." }, { status: 403 });
   try {
     await query("DELETE FROM properties WHERE id = ?", [params.id]);
     return NextResponse.json({ ok: true });

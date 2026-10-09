@@ -3,7 +3,7 @@ import Footer from "@/components/Footer";
 import PageHeader from "@/components/PageHeader";
 import { listBlogPosts } from "@/lib/queries";
 
-export const metadata = { title: "Blog & News — Flex Home" };
+export const metadata = { title: "Blog & News" };
 
 export default async function BlogPage() {
   const posts = await listBlogPosts();
