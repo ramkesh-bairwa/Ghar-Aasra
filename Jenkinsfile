@@ -43,9 +43,9 @@ pipeline {
                     mkdir -p ${APP_DIR}
                     rsync -av --delete \
                         --exclude='.git' \
-                        --exclude='src/flexhome/node_modules' \
-                        --exclude='src/flexhome/.next' \
-                        --exclude='src/flexhome/.env' \
+                        --exclude='node_modules' \
+                        --exclude='.next' \
+                        --exclude='.env' \
                         ./ ${APP_DIR}/
                 '''
             }
