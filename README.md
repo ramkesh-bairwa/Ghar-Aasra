@@ -68,3 +68,18 @@ automatically — no code changes.
   under Users in MySQL first, then link their ID in the Agent/Developer
   form. This keeps login credentials and public profile data in one place.
 - The mortgage calculator on the homepage is fully client-side (no DB).
+
+## Deploy (server, PM2)
+
+First time: install MySQL + Node 20 + PM2 (`npm i -g pm2`), clone the repo,
+create `.env`, then run the steps below and `pm2 start ecosystem.config.js && pm2 save && pm2 startup`.
+
+Every update:
+
+```bash
+git pull
+npm ci
+npm run db:init            # applies schema.sql (safe to re-run)
+npm run build
+pm2 restart gharaasra
+```

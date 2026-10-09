@@ -2,7 +2,7 @@
 -- Runs against whichever database you select, so it works for any DB name:
 --   mysql -u <user> -p <database> < database/schema.sql
 -- Safe to re-run: tables are created only if missing and new columns are
--- added only if absent. Jenkins applies it on every deploy (see Jenkinsfile).
+-- added only if absent. `npm run db:init` applies it on every deploy.
 
 -- ---------- Users & roles (site users + admin panel accounts) ----------
 CREATE TABLE IF NOT EXISTS users (

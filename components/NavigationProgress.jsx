@@ -68,6 +68,19 @@ function ProgressBar() {
     finish();
   }, [pathname, searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // A page that has stayed up for a while loaded fine, so app/error.js may
+  // auto-reload again after the next deploy.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        sessionStorage.removeItem("fh_chunk_reload");
+      } catch {
+        /* storage blocked */
+      }
+    }, 10000);
+    return () => clearTimeout(t);
+  }, []);
+
   useEffect(() => {
     // Capture phase: Next's <Link> calls preventDefault() in its own React
     // handler, which runs before a bubbling document listener would.
