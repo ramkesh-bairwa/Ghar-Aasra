@@ -12,6 +12,11 @@ import WhatsAppFloat from "@/components/WhatsAppFloat";
 import AdPopup from "@/components/ads/AdPopup";
 import NavigationProgress from "@/components/NavigationProgress";
 
+// Everything on the site (settings, logo, menus, content) is managed from the
+// admin panel, so pages are rendered per request instead of being frozen at
+// build time — admin changes show up immediately in production too.
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata() {
   const settings = await getAllSiteSettings();
   const custom = customFavicon(settings);
