@@ -1,8 +1,8 @@
--- Flex Home real estate portal — MySQL schema
--- Run: mysql -u root -p flexhome < database/schema.sql
-
-CREATE DATABASE IF NOT EXISTS flexhome CHARACTER SET utf8mb4;
-USE flexhome;
+-- GharAashra real estate portal — MySQL schema
+-- Runs against whichever database you select, so it works for any DB name:
+--   mysql -u <user> -p <database> < database/schema.sql
+-- Safe to re-run: tables are created only if missing and new columns are
+-- added only if absent. Jenkins applies it on every deploy (see Jenkinsfile).
 
 -- ---------- Users & roles (site users + admin panel accounts) ----------
 CREATE TABLE IF NOT EXISTS users (

@@ -67,7 +67,34 @@ pipeline {
                 echo '>>> Recreating containers...'
                 sh '''
                     cd ${APP_DIR}
+                    docker compose -f ${COMPOSE_FILE} up -d mysql
                     docker compose -f ${COMPOSE_FILE} up -d --remove-orphans --force-recreate ${SERVICE}
+                '''
+            }
+        }
+
+        stage('Database migrate') {
+            steps {
+                echo '>>> Applying database/schema.sql (safe to re-run)...'
+                sh '''
+                    set +x  # don't echo commands: they contain the DB password
+                    cd ${APP_DIR}
+                    if [ ! -f .env ]; then
+                        echo "Missing ${APP_DIR}/.env — create it first (DB_NAME, DB_USER, DB_PASSWORD, JWT_SECRET)."
+                        exit 1
+                    fi
+                    set -a; . ./.env; set +a
+                    # MYSQL_PWD keeps the password out of the process list and build log.
+                    DB="${DB_NAME:-ghar_aashra}"
+                    SQL="docker exec -i -e MYSQL_PWD=${DB_PASSWORD} gharaasra_mysql mysql -u${DB_USER:-root}"
+                    # Wait for MySQL to accept connections (fresh containers take a few seconds).
+                    for i in $(seq 1 30); do
+                        $SQL -e "SELECT 1" > /dev/null 2>&1 && break
+                        sleep 2
+                    done
+                    $SQL -e "CREATE DATABASE IF NOT EXISTS ${DB} CHARACTER SET utf8mb4"
+                    $SQL "${DB}" < database/schema.sql
+                    echo "Schema applied to ${DB}."
                 '''
             }
         }
